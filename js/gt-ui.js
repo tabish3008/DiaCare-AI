@@ -7,6 +7,18 @@ let data=G.store.load(),pending=[],pdfjs=null;
 const say=(t,bad)=>{$('msg').innerHTML=`<div class="notice ${bad?'alert':''}">${esc(t)}</div>`};
 let cloudUser=null,cloudSyncPaused=false,cloudQueue=Promise.resolve();
 const cloudStatus=t=>{$('cloudStatus').textContent=t};
+window.DiaCareCloud={
+ isSignedIn:()=>Boolean(cloudUser&&!cloudSyncPaused),
+ askEducation:async question=>{
+  if(window.DiaCareGoogle&&window.DiaCareGoogle.hasApiKey()){
+   return await window.DiaCareGoogle.askGoogle(question);
+  }
+  if(!cloudUser||cloudSyncPaused)throw new Error('Sign in or add your Google Gemini API key to use Google-grounded education.');
+  const {data:result,error}=await supabase.functions.invoke('diacare-education',{body:{question}});
+  if(error){let message=error.message;try{const body=await error.context.json();if(body.error)message=body.error}catch{}throw new Error(message)}
+  return result;
+ }
+};
 const isUuid=x=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(x||''));
 function recordKey(r){return [r.date,r.test,r.value,r.unit,r.fasting].join('|')}
 async function readCloud(user){

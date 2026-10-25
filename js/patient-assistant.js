@@ -1,18 +1,77 @@
-/* DIACARE AI patient-history companion. Browser-local rules; no model or network calls. */
+/* DIACARE AI - Direct Google-Powered Education and Patient Record Assistant */
 (function () {
   'use strict';
 
   var G = window.GT;
   if (!G) return;
 
+  // Helper for HTML escaping
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Safe Markdown renderer for Google API responses
+  function renderMarkdown(text) {
+    if (!text) return '';
+    var escaped = esc(text);
+
+    // Headers
+    escaped = escaped.replace(/^### (.*$)/gim, '<h4 class="dc-md-h">$1</h4>');
+    escaped = escaped.replace(/^## (.*$)/gim, '<h3 class="dc-md-h">$1</h3>');
+    escaped = escaped.replace(/^# (.*$)/gim, '<h3 class="dc-md-h">$1</h3>');
+
+    // Bold and Italics
+    escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/\*([^\*\n]+)\*/g, '<em>$1</em>');
+    escaped = escaped.replace(/_([^_\n]+)_/g, '<em>$1</em>');
+
+    // Links: [text](https://...)
+    escaped = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+    // Bullet Lists & Paragraphs
+    var lines = escaped.split('\n');
+    var inList = false;
+    var out = [];
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (/^[•\-\*]\s+(.*)/.test(line)) {
+        if (!inList) {
+          out.push('<ul class="dc-md-ul">');
+          inList = true;
+        }
+        out.push('<li>' + line.replace(/^[•\-\*]\s+/, '') + '</li>');
+      } else {
+        if (inList) {
+          out.push('</ul>');
+          inList = false;
+        }
+        if (line.length > 0) {
+          out.push('<p class="dc-md-p">' + line + '</p>');
+        }
+      }
+    }
+    if (inList) out.push('</ul>');
+
+    return out.join('');
+  }
+
+  // Create Launcher button
   var launcher = document.createElement('button');
   launcher.className = 'dc-assistant-launcher';
   launcher.type = 'button';
-  launcher.setAttribute('aria-label', 'Open patient history assistant');
+  launcher.setAttribute('aria-label', 'Open DiaCare Google AI Assistant');
   launcher.setAttribute('aria-expanded', 'false');
   launcher.setAttribute('aria-controls', 'dc-assistant-panel');
-  launcher.innerHTML = '<span class="dc-assistant-launcher__icon" aria-hidden="true">✦</span><span>Patient assistant</span>';
+  launcher.innerHTML = '<span class="dc-assistant-launcher__icon" aria-hidden="true">✦</span><span>Ask Google AI</span>';
 
+  // Create Assistant Panel
   var panel = document.createElement('section');
   panel.className = 'dc-assistant-panel';
   panel.id = 'dc-assistant-panel';
@@ -22,21 +81,46 @@
   panel.hidden = true;
   panel.innerHTML = [
     '<header class="dc-assistant-header">',
-      '<div class="dc-assistant-avatar" aria-hidden="true">D</div>',
-      '<div class="dc-assistant-heading"><h2 id="dc-assistant-title">DIACARE AI</h2><p>Patient history assistant</p></div>',
-      '<button class="dc-assistant-clear" type="button">Clear</button>',
+      '<div class="dc-assistant-avatar" aria-hidden="true">✦</div>',
+      '<div class="dc-assistant-heading">',
+        '<h2 id="dc-assistant-title">DIACARE AI</h2>',
+        '<p id="dc-assistant-status-desc">Direct Google Search Grounding</p>',
+      '</div>',
+      '<button class="dc-assistant-key-toggle" type="button" title="Configure Google API Key" aria-label="Configure Google API Key">🔑 Key</button>',
+      '<button class="dc-assistant-clear" type="button" title="Clear conversation">Clear</button>',
       '<button class="dc-assistant-close" type="button" aria-label="Close assistant">×</button>',
     '</header>',
-    '<p class="dc-assistant-safety">Uses confirmed records saved in this browser. Educational only—not a diagnosis or treatment plan.</p>',
+    '<div class="dc-assistant-key-drawer" id="dc-assistant-key-drawer" hidden>',
+      '<div class="dc-assistant-key-header">',
+        '<strong>Google Gemini API Setup</strong>',
+        '<span class="dc-assistant-status-pill" id="dc-key-status-pill"><span class="dot off"></span> Disconnected</span>',
+      '</div>',
+      '<p class="dc-key-help">Connect your free Google Gemini API key to directly answer any diabetes, medical, or general question with live Google Search grounding.</p>',
+      '<form class="dc-assistant-key-form" id="dc-key-form">',
+        '<input type="password" class="dc-assistant-key-input" id="dc-key-input" placeholder="Paste Google API key (AIzaSy...)" autocomplete="off">',
+        '<button type="submit" class="dc-assistant-key-btn">Save</button>',
+        '<button type="button" class="dc-assistant-key-btn danger" id="dc-key-remove" hidden>Remove</button>',
+      '</form>',
+      '<div class="dc-key-links">',
+        '<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Get a free Google Gemini key at Google AI Studio ↗</a>',
+      '</div>',
+    '</div>',
+    '<div class="dc-assistant-safety">',
+      'Directly answers questions using Google Search &amp; Gemini AI. Includes clinical references &amp; sources. Educational only — not medical advice.',
+    '</div>',
+    '<div class="dc-assistant-modebar" role="tablist" aria-label="Assistant mode">',
+      '<button type="button" role="tab" aria-selected="true" data-mode="google">✦ Ask Google (Direct)</button>',
+      '<button type="button" role="tab" aria-selected="false" data-mode="history">📋 Local History Only</button>',
+    '</div>',
     '<div class="dc-assistant-messages" id="dc-assistant-messages" aria-live="polite" aria-relevant="additions"></div>',
     '<div class="dc-assistant-suggestions" aria-label="Suggested questions"></div>',
     '<form class="dc-assistant-form" id="dc-assistant-form">',
-      '<label class="sr-only" for="dc-assistant-input">Ask about the patient record</label>',
-      '<input id="dc-assistant-input" maxlength="240" autocomplete="off" placeholder="Ask about this record…" required>',
+      '<label class="sr-only" for="dc-assistant-input">Ask any question with Google</label>',
+      '<input id="dc-assistant-input" maxlength="500" autocomplete="off" placeholder="Ask any question with Google (e.g. diabetes, diet, readings)…" required>',
       '<button type="submit" aria-label="Send question">↑</button>',
     '</form>',
     '<div class="dc-assistant-entry-actions" hidden></div>',
-    '<p class="dc-assistant-privacy">Messages stay on this page and are cleared when you close or refresh it.</p>'
+    '<p class="dc-assistant-privacy">Your inquiries stay in this browser. Answers are directly retrieved from Google API.</p>'
   ].join('');
 
   document.body.appendChild(launcher);
@@ -46,14 +130,60 @@
   var input = panel.querySelector('#dc-assistant-input');
   var suggestionBox = panel.querySelector('.dc-assistant-suggestions');
   var entryActions = panel.querySelector('.dc-assistant-entry-actions');
+  var keyDrawer = panel.querySelector('#dc-assistant-key-drawer');
+  var keyToggle = panel.querySelector('.dc-assistant-key-toggle');
+  var keyForm = panel.querySelector('#dc-key-form');
+  var keyInput = panel.querySelector('#dc-key-input');
+  var keyRemove = panel.querySelector('#dc-key-remove');
+  var keyStatusPill = panel.querySelector('#dc-key-status-pill');
+  var statusDesc = panel.querySelector('#dc-assistant-status-desc');
+
   var entryDraft = null;
-  var examples = [
+  var mode = 'google';
+
+  var googleExamples = [
+    'What is HbA1c and how is it tested?',
+    'What are normal fasting glucose levels?',
+    'Summarize my saved glucose readings',
+    'Can yoga help manage blood sugar?',
+    'What foods cause blood sugar spikes?'
+  ];
+
+  var historyExamples = [
     'Summarize my history',
     'What are my latest readings?',
-    'How many readings are saved?',
     'Show my patient notes',
+    'What is my highest glucose reading?',
     'Add a glucose reading'
   ];
+
+  function getGoogleClient() {
+    return window.DiaCareGoogle || null;
+  }
+
+  function hasGoogleKey() {
+    var client = getGoogleClient();
+    return Boolean(client && client.hasApiKey());
+  }
+
+  function updateKeyStatusUI() {
+    var hasKey = hasGoogleKey();
+    if (hasKey) {
+      keyStatusPill.innerHTML = '<span class="dot"></span> Connected';
+      keyStatusPill.classList.remove('off');
+      keyRemove.hidden = false;
+      keyToggle.innerHTML = '🔑 Key ✓';
+      keyToggle.style.color = '#147d9b';
+      statusDesc.textContent = 'Google API Connected (Search Grounded)';
+    } else {
+      keyStatusPill.innerHTML = '<span class="dot off"></span> Not Configured';
+      keyStatusPill.classList.add('off');
+      keyRemove.hidden = true;
+      keyToggle.innerHTML = '🔑 Key';
+      keyToggle.style.color = '';
+      statusDesc.textContent = 'Enter API Key to link Google';
+    }
+  }
 
   function freshRecord() {
     var saved = G.store.load();
@@ -63,12 +193,103 @@
     return { patient: saved.patient || null, readings: readings };
   }
 
-  function addMessage(text, role) {
+  function summarizePatientContext(record) {
+    if (!record || !record.readings || !record.readings.length) {
+      var p = record && record.patient;
+      if (p && (p.name || p.notes)) {
+        return 'Patient Label: ' + (p.name || 'Anonymous') + (p.notes ? ' | Notes: ' + p.notes : '') + ' | No readings saved yet.';
+      }
+      return 'No confirmed readings saved in this browser yet.';
+    }
+
+    var lines = [];
+    if (record.patient && record.patient.name) {
+      lines.push('Patient Label: ' + record.patient.name);
+    }
+    if (record.patient && record.patient.notes) {
+      lines.push('Patient Notes: ' + record.patient.notes);
+    }
+
+    var glucose = byTest(record.readings, 'glucose');
+    var a1c = byTest(record.readings, 'hba1c');
+    lines.push('Total confirmed readings: ' + record.readings.length + ' (' + glucose.length + ' Glucose, ' + a1c.length + ' HbA1c)');
+
+    if (glucose.length) {
+      var latestG = glucose[glucose.length - 1];
+      lines.push('Latest Glucose: ' + readingLabel(latestG));
+    }
+    if (a1c.length) {
+      var latestA = a1c[a1c.length - 1];
+      lines.push('Latest HbA1c: ' + readingLabel(latestA));
+    }
+
+    // List up to 10 most recent readings
+    var recent = record.readings.slice(-10);
+    lines.push('Recent readings list:');
+    recent.forEach(function (r) {
+      lines.push('- ' + readingLabel(r));
+    });
+
+    return lines.join('\n');
+  }
+
+  function addMessage(content, role, isHtml) {
     var item = document.createElement('div');
     item.className = 'dc-assistant-message dc-assistant-message--' + role;
-    item.textContent = text;
+    if (isHtml) {
+      item.innerHTML = content;
+    } else {
+      item.textContent = content;
+    }
     log.appendChild(item);
     log.scrollTop = log.scrollHeight;
+    return item;
+  }
+
+  function addSources(messageElement, sources) {
+    var clean = (sources || []).filter(function (s) {
+      return s && /^https?:\/\//i.test(s.url || '');
+    }).slice(0, 5);
+
+    if (!clean.length) return;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'dc-assistant-sources';
+    wrap.innerHTML = '<strong><span aria-hidden="true">🌐</span> Sources from Google:</strong>';
+
+    var list = document.createElement('ul');
+    clean.forEach(function (source) {
+      var li = document.createElement('li');
+      var link = document.createElement('a');
+      link.href = source.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = source.title || source.url;
+      li.appendChild(link);
+      list.appendChild(li);
+    });
+
+    wrap.appendChild(list);
+    messageElement.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function switchMode(next) {
+    mode = next === 'history' ? 'history' : 'google';
+    panel.querySelectorAll('.dc-assistant-modebar [data-mode]').forEach(function (button) {
+      button.setAttribute('aria-selected', button.dataset.mode === mode ? 'true' : 'false');
+    });
+
+    if (mode === 'google') {
+      input.placeholder = 'Ask any question with Google (e.g. diabetes, diet, readings)…';
+      addMessage('Switched to <strong>Ask Google</strong> mode. You can ask any question directly, backed by live Google Search grounding.', 'assistant', true);
+    } else {
+      input.placeholder = 'Ask about this browser’s saved patient records…';
+      addMessage('Switched to <strong>Local History</strong> mode. Answers use only the records saved in this browser without network calls.', 'assistant', true);
+    }
+
+    suggestionBox.textContent = '';
+    showSuggestions();
   }
 
   function byTest(readings, test) {
@@ -78,10 +299,11 @@
 
   function readingLabel(r) {
     var kind = r.test === 'hba1c' ? 'HbA1c' : 'Glucose';
-    var fasting = r.fasting === 'yes' ? ' · fasting' : r.fasting === 'no' ? ' · non-fasting' : '';
+    var fasting = r.fasting === 'yes' ? ' (fasting)' : r.fasting === 'no' ? ' (non-fasting)' : '';
     return r.date + ': ' + kind + ' ' + r.value + ' ' + r.unit + fasting;
   }
 
+  // --- Manual Reading Draft Flow (Add reading by voice/chat) ---
   function clearEntryDraft() {
     entryDraft = null;
     entryActions.textContent = '';
@@ -91,45 +313,48 @@
   function showEntryReview(draft) {
     clearEntryDraft();
     entryDraft = draft;
-    addMessage('Please check this entry before it is added: ' + readingLabel(draft) + (draft.fasting === 'unknown' ? '' : (draft.fasting === 'yes' ? ' · fasting' : ' · non-fasting')) + '. Confirm to save it to the patient history and charts.', 'assistant');
+    addMessage('Please check this reading before saving: ' + readingLabel(draft) + '. Confirm to add it to your patient history.', 'assistant', false);
     entryActions.hidden = false;
+
     var confirm = document.createElement('button');
     confirm.type = 'button';
     confirm.className = 'dc-assistant-confirm';
-    confirm.textContent = 'Confirm and add reading';
+    confirm.textContent = 'Confirm and Save Reading';
     confirm.addEventListener('click', function () {
       if (!entryDraft) return;
       var toSave = Object.assign({}, entryDraft, { source: 'patient assistant entry', origin: 'user-entered', status: 'reviewed' });
       var error = G.validate(toSave);
       if (error) {
-        addMessage('I could not save that entry: ' + error + ' Please start again with “Add a glucose reading.”', 'assistant');
+        addMessage('Could not save reading: ' + error, 'assistant', false);
         clearEntryDraft();
         return;
       }
       var data = G.store.load();
       var result = G.addUnique(data, [toSave]);
       if (!result.added) {
-        addMessage('That same reading is already in the patient history, so I did not add a duplicate.', 'assistant');
+        addMessage('That reading is already in your record, so duplicate was skipped.', 'assistant', false);
         clearEntryDraft();
         return;
       }
       if (!G.store.save(data)) {
-        addMessage('The browser could not save this reading. Check browser storage and try again.', 'assistant');
+        addMessage('Could not write to browser storage. Please try again.', 'assistant', false);
         clearEntryDraft();
         return;
       }
-      addMessage('Reading added to this browser’s patient history. The charts and report will include it when refreshed.', 'assistant');
+      addMessage('✓ Reading saved! It is now in your patient record and charts.', 'assistant', false);
       clearEntryDraft();
       document.dispatchEvent(new CustomEvent('diacare:record-updated'));
     });
+
     var cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'dc-assistant-cancel';
     cancel.textContent = 'Cancel';
     cancel.addEventListener('click', function () {
       clearEntryDraft();
-      addMessage('Entry cancelled; nothing was saved.', 'assistant');
+      addMessage('Reading cancelled; nothing was saved.', 'assistant', false);
     });
+
     entryActions.append(confirm, cancel);
   }
 
@@ -138,7 +363,7 @@
     if (!entryDraft.test) {
       if (/a1c|hba1c/.test(q)) entryDraft.test = 'hba1c';
       else if (/glucose|sugar/.test(q)) entryDraft.test = 'glucose';
-      else return 'Which test should I add: glucose or HbA1c?';
+      else return 'Which test should I add: blood glucose or HbA1c?';
     }
     var dateMatch = question.match(/\b(\d{4}-\d{2}-\d{2})\b/);
     if (dateMatch) entryDraft.date = dateMatch[1];
@@ -154,15 +379,22 @@
       var unitText = valueMatch[2] ? valueMatch[2].toLowerCase().replace(/\s/g, '') : '';
       if (unitText) entryDraft.unit = unitMap[unitText] || '';
     }
-    if (!entryDraft.value) return 'What number is shown on the report? Include the unit if you know it, for example “126 mg/dL.”';
-    if (!entryDraft.unit) return 'What unit is printed beside ' + entryDraft.value + '? For glucose use mg/dL or mmol/L; for HbA1c use % or mmol/mol.';
-    if (!entryDraft.date) return 'What date was this test taken? Please use YYYY-MM-DD, for example 2026-10-24.';
-    if (!entryDraft.fasting) return 'Was this fasting, non-fasting, or unknown?';
-    var draft = { date: entryDraft.date, test: entryDraft.test, value: entryDraft.value, unit: entryDraft.unit, fasting: entryDraft.fasting };
+    if (!entryDraft.value) return 'What number is shown on the test? (e.g. 126 mg/dL or 6.5%)';
+    if (!entryDraft.unit) return 'What unit is printed beside ' + entryDraft.value + '? (mg/dL or mmol/L for glucose; % for HbA1c)';
+    if (!entryDraft.date) return 'What was the date of this test? (YYYY-MM-DD, e.g. ' + new Date().toISOString().slice(0, 10) + ')';
+    if (!entryDraft.fasting && entryDraft.test === 'glucose') return 'Was this fasting, non-fasting, or unknown?';
+
+    var draft = {
+      date: entryDraft.date,
+      test: entryDraft.test,
+      value: entryDraft.value,
+      unit: entryDraft.unit,
+      fasting: entryDraft.fasting || 'unknown'
+    };
     var error = G.validate(draft);
     if (error) {
       clearEntryDraft();
-      return 'I can’t prepare that entry: ' + error + ' Please start again with “Add a glucose reading” or “Add an HbA1c reading.”';
+      return 'Could not prepare that entry: ' + error + '. Say "Add a glucose reading" to try again.';
     }
     showEntryReview(draft);
     return null;
@@ -171,30 +403,28 @@
   function beginEntry(question) {
     var askedA1c = /a1c|hba1c|haemoglobin|hemoglobin/.test(question);
     var askedGlucose = /glucose|sugar|blood.?sugar/.test(question);
-    if (askedA1c && askedGlucose) return 'I see both glucose and HbA1c mentioned. Which single test should I add? Say “Add glucose” or “Add HbA1c.”';
+    if (askedA1c && askedGlucose) return 'Which test should I add? Say "Add glucose" or "Add HbA1c."';
     entryDraft = { stage: 'collecting', test: askedA1c ? 'hba1c' : askedGlucose ? 'glucose' : null, fasting: null };
     return continueEntry(question);
   }
 
+  // --- Local Rule Based Answer (Fallback or Offline Mode) ---
   function summarize(record) {
     var glucose = byTest(record.readings, 'glucose');
     var a1c = byTest(record.readings, 'hba1c');
-    if (!record.readings.length) return 'There are no confirmed readings saved in this browser yet. Add a reading, or upload a report and confirm the extracted values first.';
+    if (!record.readings.length) return 'There are no confirmed readings saved in this browser yet. You can add one or upload a lab report.';
 
     var parts = [];
-    parts.push('Saved record: ' + (record.patient && record.patient.name ? record.patient.name : 'no patient name set') + '.');
+    parts.push('Saved record for: ' + (record.patient && record.patient.name ? record.patient.name : 'Demo Patient') + '.');
     parts.push(record.readings.length + ' confirmed reading(s): ' + glucose.length + ' glucose and ' + a1c.length + ' HbA1c.');
     var dates = record.readings.map(function (r) { return r.date; }).filter(Boolean).sort();
-    if (dates.length) parts.push('Recorded dates run from ' + dates[0] + ' to ' + dates[dates.length - 1] + '.');
-    var unknown = record.readings.length - glucose.length - a1c.length;
-    if (unknown > 0) parts.push(unknown + ' reading(s) have a unit or type that cannot be charted.');
+    if (dates.length) parts.push('Dates span from ' + dates[0] + ' to ' + dates[dates.length - 1] + '.');
     if (glucose.length) parts.push('Latest glucose: ' + readingLabel(glucose[glucose.length - 1]) + '.');
     if (a1c.length) parts.push('Latest HbA1c: ' + readingLabel(a1c[a1c.length - 1]) + '.');
-    parts.push('This is a record summary, not a diagnosis or prediction.');
     return parts.join(' ');
   }
 
-  function answer(question) {
+  function localAnswer(question) {
     var q = question.toLowerCase();
     var record = freshRecord();
     var glucose = byTest(record.readings, 'glucose');
@@ -203,98 +433,213 @@
     var askedGlucose = /glucose|sugar|blood.?sugar/.test(q);
     var selected = askedA1c ? a1c : askedGlucose ? glucose : [];
 
-    if (entryDraft && entryDraft.stage === 'collecting') return continueEntry(question);
-    if (/\b(add|enter|record|save|log)\b/.test(q) && /\b(glucose|sugar|blood.?sugar|a1c|hba1c)\b/.test(q)) return beginEntry(q);
-
     if (/^(\s*)(hi|hello|hey|namaste)\b/.test(q) || /what can you do|help/.test(q)) {
-      return 'I can summarize confirmed readings saved in this browser, show recent values, compare the earliest and latest values, and repeat the patient notes. I cannot diagnose or recommend medicines, supplements, kadha, or exercise plans.';
+      return 'I am connected to Google API to directly answer any medical, diabetes, or general question with Google Search. I can also summarize your saved records, analyze readings, or add new test entries.';
     }
     if (/note|medication list|patient detail|profile|record details|name/.test(q) && !askedGlucose && !askedA1c) {
       var p = record.patient;
-      if (!p) return 'No patient record is saved in this browser yet.';
-      var details = ['Patient label: ' + (p.name || 'not set') + '.'];
-      if (p.from || p.to) details.push('Record period entered: ' + (p.from || 'not set') + ' to ' + (p.to || 'not set') + '.');
-      if (p.notes) details.push('Saved notes: ' + p.notes);
-      else details.push('There are no optional patient notes saved.');
+      if (!p) return 'No patient record details saved yet.';
+      var details = ['Patient: ' + (p.name || 'Not set') + '.'];
+      if (p.notes) details.push('Notes: ' + p.notes);
       return details.join(' ');
     }
-    if (/\b(what is|explain|tell me about)\b/.test(q) && /ayurved|yoga/.test(q)) {
-      if (/yoga/.test(q)) return 'Yoga is a form of physical activity. What is safe depends on a person’s health, fitness, complications, and medicines; DIACARE AI does not prescribe poses or a schedule based on glucose. Discuss a suitable activity plan with the care team. See the Movement & yoga section below.';
-      return 'Ayurveda is a traditional system of medicine. Evidence for Ayurvedic treatments for diabetes is limited, and some products may contain harmful contaminants or interact with medicines. DIACARE AI can’t recommend a product or dose. See the Ayurveda section below and discuss any product with a clinician or pharmacist.';
+    if (/how many|count|number of|summari[sz]e|overview|history|all readings|patient history/.test(q)) {
+      return summarize(record);
     }
-    if (/medicine|medication|drug|dose|treatment|cure|diagnos|prescrib|supplement|kadha|ayurved|yoga|should i take/.test(q)) {
-      return 'I can’t diagnose or recommend a medicine, supplement, kadha, dose, or yoga routine. Please discuss treatment and activity choices with the patient’s healthcare professional. I can summarize the saved record or show its notes.';
-    }
-    if (/what is|explain|meaning/.test(q) && /a1c|hba1c/.test(q)) return 'HbA1c is a blood test that reflects average blood glucose over roughly the previous 2–3 months. This site shows it separately from single glucose readings. A clinician interprets results in context.';
-    if (/privacy|where.*data|store|saved|send|upload/.test(q)) return 'Patient details and confirmed readings are stored in this browser’s local storage. Uploaded files are read locally and discarded after parsing. The assistant uses those saved records in this browser; it does not send health data to an AI service. Avoid real identifiers in this prototype.';
-    if (/how many|count|number of|summari[sz]e|overview|history|all readings|patient history/.test(q)) return summarize(record);
     if (/latest|recent|last reading|most recent/.test(q)) {
       if (!askedA1c && !askedGlucose) {
         var latestParts = [];
         if (glucose.length) latestParts.push('Latest glucose: ' + readingLabel(glucose[glucose.length - 1]));
         if (a1c.length) latestParts.push('Latest HbA1c: ' + readingLabel(a1c[a1c.length - 1]));
-        return latestParts.length ? latestParts.join('. ') + '. These are record values, not a medical interpretation.' : 'No confirmed, chartable glucose or HbA1c readings are saved.';
+        return latestParts.length ? latestParts.join('. ') : 'No confirmed readings saved yet.';
       }
-      if (!selected.length) return 'No confirmed ' + (askedA1c ? 'HbA1c' : 'glucose') + ' readings are saved.';
-      var last = selected[selected.length - 1];
-      if (askedA1c || askedGlucose) return 'Latest ' + (askedA1c ? 'HbA1c' : 'glucose') + ': ' + readingLabel(last) + '. Values are shown as recorded; this is not a medical interpretation.';
-      return 'Most recent confirmed reading: ' + readingLabel(last) + '.';
+      if (!selected.length) return 'No confirmed ' + (askedA1c ? 'HbA1c' : 'glucose') + ' readings saved.';
+      return 'Latest ' + (askedA1c ? 'HbA1c' : 'glucose') + ': ' + readingLabel(selected[selected.length - 1]) + '.';
     }
     if (/highest|maximum|peak|lowest|minimum/.test(q)) {
-      if (!askedA1c && !askedGlucose) return 'Please specify glucose or HbA1c. I keep these test types separate and don’t compare them with each other.';
-      if (!selected.length) return 'There are no chartable confirmed readings for that test in this browser.';
+      if (!askedA1c && !askedGlucose) return 'Please specify glucose or HbA1c to find the extreme value.';
+      if (!selected.length) return 'No readings saved for that test.';
       var wantLow = /lowest|minimum/.test(q);
-      var valueFn = function (r) { return G.toCommon(r); };
-      var extreme = selected.reduce(function (best, r) { return (wantLow ? valueFn(r) < valueFn(best) : valueFn(r) > valueFn(best)) ? r : best; });
-      return (wantLow ? 'Lowest' : 'Highest') + ' saved ' + (askedA1c ? 'HbA1c' : 'glucose') + ' value: ' + readingLabel(extreme) + '. This is a descriptive comparison only.';
+      var extreme = selected.reduce(function (best, r) {
+        return (wantLow ? G.toCommon(r) < G.toCommon(best) : G.toCommon(r) > G.toCommon(best)) ? r : best;
+      });
+      return (wantLow ? 'Lowest' : 'Highest') + ' ' + (askedA1c ? 'HbA1c' : 'glucose') + ': ' + readingLabel(extreme) + '.';
     }
-    if (/average|mean/.test(q)) {
-      if (!askedA1c && !askedGlucose) return 'Please specify glucose or HbA1c. I calculate summaries separately for each test type.';
-      if (!selected.length) return 'There are no chartable confirmed readings for that test in this browser.';
-      var avg = selected.reduce(function (sum, r) { return sum + G.toCommon(r); }, 0) / selected.length;
-      return 'The descriptive average of ' + selected.length + ' confirmed ' + (askedA1c ? 'HbA1c' : 'glucose') + ' reading(s) is ' + avg.toFixed(1) + ' ' + G.commonUnit(askedA1c ? 'hba1c' : 'glucose') + '. Individual readings and test conditions matter; this is not a target or diagnosis.';
-    }
-    if (/trend|change|increas|decreas|going up|going down/.test(q)) {
-      if (!askedA1c && !askedGlucose) return 'Please specify glucose or HbA1c so I can compare like with like.';
-      if (selected.length < 2) return 'There are not enough confirmed readings for that test to compare over time.';
-      var first = selected[0], latest = selected[selected.length - 1];
-      var delta = G.toCommon(latest) - G.toCommon(first);
-      var unit = G.commonUnit(askedA1c ? 'hba1c' : 'glucose');
-      var direction = delta > 0 ? 'higher' : delta < 0 ? 'lower' : 'the same';
-      return 'Comparing the earliest and latest confirmed ' + (askedA1c ? 'HbA1c' : 'glucose') + ' values: ' + readingLabel(first) + ' and ' + readingLabel(latest) + '. The latest is ' + direction + ' by ' + Math.abs(delta).toFixed(1) + ' ' + unit + '. This simple comparison does not predict future results or explain why values changed.';
-    }
-    if (/low|below 70/.test(q)) {
-      var lows = glucose.filter(function (r) { return G.toCommon(r) < 70; });
-      return lows.length ? 'The saved record has ' + lows.length + ' glucose reading(s) below 70 mg/dL: ' + lows.slice(-5).map(readingLabel).join('; ') + '. This threshold is considered low for many people with diabetes, but personal targets differ. Follow the clinician’s plan or contact the care team; this assistant cannot provide treatment.' : 'No confirmed glucose reading below 70 mg/dL was found in the saved record. This does not establish that readings are safe or replace your care team’s advice.';
-    }
-    if (/source|upload|import/.test(q)) return 'Only readings confirmed on the review screen are included in this summary. The original uploaded PDF or PNG is not saved by the site; a source filename may be attached to each confirmed reading.';
-    return 'I can answer questions about the confirmed patient history saved in this browser. Try “Summarize my history,” “What are my latest glucose readings?”, “Show my patient notes,” or “What is the highest HbA1c?”';
+
+    return null;
   }
 
   function showSuggestions() {
-    examples.forEach(function (example) {
-      var button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = example;
-      button.addEventListener('click', function () { ask(example); });
-      suggestionBox.appendChild(button);
+    suggestionBox.textContent = '';
+    var list = mode === 'google' ? googleExamples : historyExamples;
+    list.forEach(function (example) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = example;
+      btn.addEventListener('click', function () {
+        ask(example);
+      });
+      suggestionBox.appendChild(btn);
     });
   }
 
-  function ask(text) {
-    var question = text.trim();
-    if (!question) return;
-    addMessage(question, 'user');
-    input.value = '';
-    var response = answer(question);
-    if (response) addMessage(response, 'assistant');
+  // --- Inline API Key Setup Card inside chat ---
+  function showInlineKeySetup(pendingQuestion) {
+    var item = document.createElement('div');
+    item.className = 'dc-assistant-message dc-assistant-message--assistant dc-inline-key-card';
+    item.innerHTML = [
+      '<div class="dc-inline-key-wrap">',
+        '<strong><span aria-hidden="true">🔑</span> Link Google Gemini API</strong>',
+        '<p>To directly answer any question with live Google Search grounding, enter your free Google Gemini API key:</p>',
+        '<div class="dc-inline-key-row">',
+          '<input type="password" class="dc-inline-key-input" placeholder="Paste Gemini API key (AIzaSy...)" autocomplete="off">',
+          '<button type="button" class="dc-inline-key-btn">Connect &amp; Ask</button>',
+        '</div>',
+        '<p class="dc-inline-key-sub"><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Get a free API key at Google AI Studio ↗</a></p>',
+      '</div>'
+    ].join('');
+
+    var keyInp = item.querySelector('.dc-inline-key-input');
+    var keyBtn = item.querySelector('.dc-inline-key-btn');
+
+    function handleSave() {
+      var val = keyInp.value.trim();
+      if (!val) {
+        keyInp.focus();
+        return;
+      }
+      var client = getGoogleClient();
+      if (client) {
+        client.setApiKey(val);
+      }
+      updateKeyStatusUI();
+      item.innerHTML = '<strong>✓ Google API Linked!</strong> Answering your question now…';
+      setTimeout(function () {
+        if (pendingQuestion) {
+          executeGoogleAsk(pendingQuestion);
+        }
+      }, 500);
+    }
+
+    keyBtn.addEventListener('click', handleSave);
+    keyInp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleSave();
+      }
+    });
+
+    log.appendChild(item);
+    log.scrollTop = log.scrollHeight;
+    keyInp.focus();
   }
 
+  // --- Core Asking Function ---
+  async function executeGoogleAsk(question) {
+    var client = getGoogleClient();
+    if (!client || !client.hasApiKey()) {
+      showInlineKeySetup(question);
+      return;
+    }
+
+    // Add loading indicator
+    var loadingItem = document.createElement('div');
+    loadingItem.className = 'dc-assistant-message dc-assistant-message--assistant dc-assistant-loading';
+    loadingItem.innerHTML = [
+      '<span class="dc-assistant-loading-text">Searching Google &amp; preparing answer</span>',
+      '<span class="dc-assistant-loading-dots"><span></span><span></span><span></span></span>'
+    ].join(' ');
+    log.appendChild(loadingItem);
+    log.scrollTop = log.scrollHeight;
+
+    var record = freshRecord();
+    var patientContext = summarizePatientContext(record);
+
+    try {
+      var result = await client.askGoogle(question, {
+        patientContext: patientContext
+      });
+
+      loadingItem.remove();
+
+      var formatted = renderMarkdown(result.answer);
+      var reply = addMessage(formatted, 'assistant', true);
+
+      if (result.sources && result.sources.length) {
+        addSources(reply, result.sources);
+      }
+    } catch (err) {
+      loadingItem.remove();
+
+      if (err.code === 'NO_API_KEY' || err.code === 'INVALID_API_KEY') {
+        addMessage('Google API Error: ' + esc(err.message), 'assistant', false);
+        keyDrawer.hidden = false;
+        showInlineKeySetup(question);
+        return;
+      }
+
+      // Check if local rule can help answer
+      var localHelp = localAnswer(question);
+      var errMsg = 'Google was unable to answer right now: ' + esc(err.message || 'Connection issue.');
+
+      if (localHelp) {
+        errMsg += '<br><br><strong>Local Patient Record Data:</strong><br>' + esc(localHelp);
+      }
+
+      addMessage(errMsg, 'assistant', true);
+    }
+  }
+
+  async function ask(text) {
+    var question = text.trim();
+    if (!question) return;
+
+    // Display user question bubble
+    addMessage(question, 'user', false);
+    input.value = '';
+
+    // Check conversational "Add reading" draft flow
+    if (entryDraft && entryDraft.stage === 'collecting') {
+      var nextPrompt = continueEntry(question);
+      if (nextPrompt) addMessage(nextPrompt, 'assistant', false);
+      return;
+    }
+
+    var qLower = question.toLowerCase();
+    if (/\b(add|enter|record|save|log)\b/.test(qLower) && /\b(glucose|sugar|blood.?sugar|a1c|hba1c)\b/.test(qLower)) {
+      var startPrompt = beginEntry(qLower);
+      if (startPrompt) addMessage(startPrompt, 'assistant', false);
+      return;
+    }
+
+    // If History Mode is selected
+    if (mode === 'history') {
+      var local = localAnswer(question);
+      if (local) {
+        addMessage(local, 'assistant', false);
+      } else {
+        addMessage('In Local History mode, I can summarize your saved records, show latest or extreme values, or add readings. Switch to "Ask Google" mode above to ask any general or medical question.', 'assistant', false);
+      }
+      return;
+    }
+
+    // Google Mode (Default)
+    executeGoogleAsk(question);
+  }
+
+  // --- Drawer Open & Close ---
   function open() {
     panel.hidden = false;
     launcher.setAttribute('aria-expanded', 'true');
+    updateKeyStatusUI();
+
     if (!log.children.length) {
-      addMessage('Ask about confirmed readings and notes saved in this browser. I’ll summarize the record without diagnosing or recommending treatment.', 'assistant');
+      if (hasGoogleKey()) {
+        addMessage('Hello! I am connected to <strong>Google API</strong> with live Google Search grounding. Ask me any question about diabetes, health guidelines, food, yoga, medications, or your saved records.', 'assistant', true);
+      } else {
+        addMessage('Welcome to <strong>DiaCare AI</strong>! Connect your free Google Gemini API key to directly answer any diabetes, medical, or health question with live Google Search grounding.', 'assistant', true);
+        keyDrawer.hidden = false;
+      }
       showSuggestions();
     }
     input.focus();
@@ -303,26 +648,89 @@
   function close() {
     panel.hidden = true;
     launcher.setAttribute('aria-expanded', 'false');
-    log.textContent = '';
-    suggestionBox.textContent = '';
-    clearEntryDraft();
     launcher.focus();
   }
 
+  // --- Event Listeners ---
   launcher.addEventListener('click', open);
   panel.querySelector('.dc-assistant-close').addEventListener('click', close);
+
+  // External open triggers (e.g. from nav or hero button)
+  document.addEventListener('click', function (e) {
+    var target = e.target && e.target.closest && e.target.closest('.js-open-assistant');
+    if (target) {
+      e.preventDefault();
+      open();
+    }
+  });
+
+  // Mode Switch
+  panel.querySelectorAll('.dc-assistant-modebar [data-mode]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      if (button.dataset.mode !== mode) {
+        switchMode(button.dataset.mode);
+      }
+    });
+  });
+
+  // Clear Chat
   panel.querySelector('.dc-assistant-clear').addEventListener('click', function () {
     clearEntryDraft();
     log.textContent = '';
     suggestionBox.textContent = '';
-    addMessage('Chat cleared. Ask about confirmed readings and notes saved in this browser.', 'assistant');
+    addMessage('Chat cleared. Ask any question with Google below.', 'assistant', false);
     showSuggestions();
   });
+
+  // Toggle API Key Drawer
+  keyToggle.addEventListener('click', function () {
+    keyDrawer.hidden = !keyDrawer.hidden;
+    if (!keyDrawer.hidden) {
+      keyInput.focus();
+    }
+  });
+
+  // Save Key Form
+  keyForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var val = keyInput.value.trim();
+    var client = getGoogleClient();
+    if (client) {
+      client.setApiKey(val);
+    }
+    keyInput.value = '';
+    updateKeyStatusUI();
+    if (val) {
+      keyDrawer.hidden = true;
+      addMessage('✓ Google API Key saved! You can now ask any question directly with Google.', 'assistant', false);
+    }
+  });
+
+  // Remove Key
+  keyRemove.addEventListener('click', function () {
+    var client = getGoogleClient();
+    if (client) {
+      client.setApiKey('');
+    }
+    keyInput.value = '';
+    updateKeyStatusUI();
+    addMessage('Google API Key removed.', 'assistant', false);
+  });
+
+  // Chat Form Submit
   panel.querySelector('#dc-assistant-form').addEventListener('submit', function (event) {
     event.preventDefault();
     ask(input.value);
   });
+
+  // Escape key closes panel
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape' && !panel.hidden) close();
   });
+
+  // Global event listener for key changes
+  document.addEventListener('diacare:google-key-changed', updateKeyStatusUI);
+
+  // Initialize status on load
+  updateKeyStatusUI();
 }());
