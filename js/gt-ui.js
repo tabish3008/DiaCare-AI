@@ -1,17 +1,81 @@
-/* DiaCare UI: upload/review, charts, history, report. Uses window.GT (gt-core.js). */
+/* DiaCare UI: upload/review, charts, history, report and optional Supabase sync. */
+import { initializeSupabase } from './supabase-client.js';
+const supabaseState=await initializeSupabase(),supabase=supabaseState.client,supabaseConfigured=supabaseState.configured;
 const G=window.GT,$=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let data=G.store.load(),pending=[],pdfjs=null;
 const say=(t,bad)=>{$('msg').innerHTML=`<div class="notice ${bad?'alert':''}">${esc(t)}</div>`};
-const persist=()=>{if(!G.store.save(data))say('Could not save to browser storage (private mode or full).',true)};
+let cloudUser=null,cloudSyncPaused=false,cloudQueue=Promise.resolve();
+const cloudStatus=t=>{$('cloudStatus').textContent=t};
+const isUuid=x=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(x||''));
+function recordKey(r){return [r.date,r.test,r.value,r.unit,r.fasting].join('|')}
+async function readCloud(user){
+ const p=await supabase.from('patients').select('*').eq('owner_id',user.id).order('created_at',{ascending:false}).limit(1);
+ if(p.error)throw p.error;
+ const patient=p.data&&p.data[0];if(!patient)return null;
+ const q=await supabase.from('patient_readings').select('*').eq('owner_id',user.id).eq('patient_id',patient.id).order('measurement_date');
+ if(q.error)throw q.error;
+ return {patient:{cloudId:patient.id,name:patient.display_name,from:patient.period_start||'',to:patient.period_end||'',notes:''},readings:(q.data||[]).map(r=>({id:r.id,date:r.measurement_date,test:r.test_type,value:String(r.value),unit:r.unit,fasting:r.fasting_status==='not_applicable'?'unknown':r.fasting_status,source:r.source_type==='pdf_import'?'PDF import':'Supabase record',origin:r.source_type==='pdf_import'?'imported':'user-entered',status:'reviewed'}))};
+}
+async function writeCloud(snapshot){
+ if(!cloudUser||cloudSyncPaused)return;
+ const user=cloudUser;
+ let patientId=snapshot.patient&&snapshot.patient.cloudId;
+ const patientPayload={owner_id:user.id,display_name:(snapshot.patient&&snapshot.patient.name||'My demo record').trim().slice(0,60)||'My demo record',period_start:snapshot.patient&&snapshot.patient.from||null,period_end:snapshot.patient&&snapshot.patient.to||null};
+ let p;
+ if(patientId){p=await supabase.from('patients').update(patientPayload).eq('id',patientId).eq('owner_id',user.id).select('id').single()}
+ else {p=await supabase.from('patients').insert(patientPayload).select('id').single()}
+ if(p.error)throw p.error;
+ patientId=p.data.id;
+ if(!snapshot.patient)snapshot.patient={name:patientPayload.display_name,from:'',to:'',notes:''};
+ snapshot.patient.cloudId=patientId;
+ const remote=await supabase.from('patient_readings').select('id').eq('owner_id',user.id).eq('patient_id',patientId);
+ if(remote.error)throw remote.error;
+ const localRows=(snapshot.readings||[]).filter(r=>r.status==='reviewed'&&G.validate(r)===null);
+ const payload=localRows.map(r=>{
+  if(!isUuid(r.id))r.id=crypto.randomUUID();
+  return {id:r.id,patient_id:patientId,owner_id:user.id,measurement_date:r.date,test_type:r.test,value:Number(r.value),unit:r.unit,fasting_status:r.test==='hba1c'&&r.fasting==='unknown'?'not_applicable':(r.fasting||'unknown'),source_type:r.origin==='imported'?'pdf_import':'manual'};
+ });
+ if(payload.length){const saved=await supabase.from('patient_readings').upsert(payload,{onConflict:'id'});if(saved.error)throw saved.error}
+ const keep=new Set(payload.map(r=>r.id));
+ for(const old of remote.data||[]){if(!keep.has(old.id)){const removed=await supabase.from('patient_readings').delete().eq('id',old.id).eq('owner_id',user.id);if(removed.error)throw removed.error}}
+}
+function queueCloudSave(){if(!cloudUser||cloudSyncPaused)return;const user=cloudUser,snapshot=JSON.parse(JSON.stringify(data));cloudQueue=cloudQueue.then(()=>writeCloud(snapshot)).then(()=>{if(cloudUser!==user)return;if(snapshot.patient){if(!data.patient)data.patient={name:snapshot.patient.name,from:snapshot.patient.from,to:snapshot.patient.to,notes:''};data.patient.cloudId=snapshot.patient.cloudId}const ids=new Map(snapshot.readings.map(r=>[recordKey(r),r.id]));data.readings.forEach(r=>{const id=ids.get(recordKey(r));if(id)r.id=id});G.store.save(data);cloudStatus('Signed in as '+user.email+' · confirmed records synced to Supabase.')}).catch(e=>cloudStatus('Cloud save failed: '+(e.message||'check the connection and database policies')))}
+const persist=()=>{if(!G.store.save(data))say('Could not save to browser storage (private mode or full).',true);queueCloudSave()};
+function hasLocalContent(d){return Boolean(d.patient||d.readings.length)}
+async function activateCloudUser(user){
+ cloudUser=user;cloudSyncPaused=false;$('cloudSignOut').hidden=false;$('cloudSignUp').hidden=true;$('cloudSignIn').textContent='Signed in';$('cloudSignIn').disabled=true;
+ try{
+  const local=G.store.load(),remote=await readCloud(user),localHas=hasLocalContent(local);
+  if(remote&&localHas){
+   const useMerge=confirm('A cloud patient record and browser data both exist. Press OK to merge confirmed browser readings into the cloud record. Press Cancel to pause cloud syncing and keep this browser unchanged.');
+   if(!useMerge){cloudSyncPaused=true;data=local;showPatient();render();cloudStatus('Signed in as '+user.email+' · cloud sync paused so your browser data is not overwritten. Sign out or reload to choose again.');return}
+   const merged=remote;if(local.patient&&local.patient.cloudId===remote.patient.cloudId)merged.patient.notes=local.patient.notes||'';const added=G.addUnique(merged,local.readings).added;data=merged;G.store.save(data);showPatient();render();await writeCloud(data);G.store.save(data);cloudStatus('Connected · cloud and browser records merged ('+added+' new reading(s)).');
+  }else if(remote){if(local.patient&&local.patient.cloudId===remote.patient.cloudId)remote.patient.notes=local.patient.notes||'';data=remote;G.store.save(data);showPatient();render();cloudStatus('Connected · loaded your saved Supabase patient record and readings.');}
+  else if(localHas){
+   if(confirm('This account has no cloud record yet. Upload this browser’s patient label and '+local.readings.length+' confirmed reading(s) to Supabase? PDF/image files and notes will not be uploaded.')){data=local;await writeCloud(data);showPatient();cloudStatus('Connected · browser records uploaded to Supabase.')}
+   else{cloudSyncPaused=true;cloudStatus('Signed in as '+user.email+' · cloud sync paused; browser records remain local.')}
+  }else{data=local;cloudStatus('Connected as '+user.email+' · save a patient record to begin syncing.')}
+ }catch(e){cloudStatus('Could not load cloud records: '+(e.message||'check the database setup and RLS policies'));}
+}
+if(!supabaseConfigured){$('cloudConfigHelp').hidden=!supabaseState.needsKey;$('cloudSignIn').disabled=true;$('cloudSignUp').disabled=true;if(supabaseState.error)cloudStatus(supabaseState.error)}
+else{
+ $('cloudAuthForm').addEventListener('submit',async e=>{e.preventDefault();const email=$('cloudEmail').value.trim(),password=$('cloudPassword').value;cloudStatus('Signing in…');const {data:result,error}=await supabase.auth.signInWithPassword({email,password});if(error){cloudStatus(error.message);return}if(result.user)await activateCloudUser(result.user)});
+ $('cloudSignUp').addEventListener('click',async()=>{const email=$('cloudEmail').value.trim(),password=$('cloudPassword').value;if(!email||!password)return cloudStatus('Enter your email and a password of at least 6 characters first.');cloudStatus('Creating account…');const {data:result,error}=await supabase.auth.signUp({email,password,options:{emailRedirectTo:window.location.href.split('#')[0]}});if(error){cloudStatus(error.message);return}if(result.session&&result.user)await activateCloudUser(result.user);else cloudStatus('Account created. Check your email to confirm it, then sign in here.')});
+ $('cloudSignOut').addEventListener('click',async()=>{const {error}=await supabase.auth.signOut();if(error){cloudStatus(error.message);return}cloudUser=null;cloudSyncPaused=false;$('cloudSignOut').hidden=true;$('cloudSignUp').hidden=false;$('cloudSignIn').textContent='Sign in';$('cloudSignIn').disabled=false;cloudStatus('Signed out. Your browser copy remains available on this device.')});
+ supabase.auth.getSession().then(({data:sessionData,error})=>{if(error)cloudStatus(error.message);else if(sessionData.session)activateCloudUser(sessionData.session.user);else cloudStatus('Ready. Sign in to sync confirmed records to Supabase; otherwise they remain in this browser.')});
+ supabase.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN'&&session&&!cloudUser)setTimeout(()=>activateCloudUser(session.user),0)});
+}
 const opt=(arr,sel)=>arr.map(x=>`<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('');
 const fill=()=>{$('mUnit').innerHTML=opt(G.UNITS[$('mTest').value])};
 /* ---- patient ---- */
 function showPatient(){const p=data.patient||{};$('pName').value=p.name||'';$('pFrom').value=p.from||'';$('pTo').value=p.to||'';$('pNotes').value=p.notes||''}
 $('savePatient').onclick=()=>{const n=$('pName').value.trim();if(!n)return say('Enter a name or pseudonym (no real identifiers needed).',true);
  const f=$('pFrom').value,t=$('pTo').value;if(f&&t&&f>t)return say('“From” must be before “To”.',true);
- data.patient={name:n.slice(0,60),from:f,to:t,notes:$('pNotes').value.slice(0,500)};persist();say('Record saved in this browser.');render()};
-$('wipe').onclick=()=>{if(confirm('Delete the patient record and all readings from this browser?')){G.store.wipe();data={patient:null,readings:[]};showPatient();say('All data deleted.');render()}};
+ data.patient={cloudId:data.patient&&data.patient.cloudId,name:n.slice(0,60),from:f,to:t,notes:$('pNotes').value.slice(0,500)};persist();say('Record saved in this browser.');render()};
+ $('wipe').onclick=async()=>{const scope=cloudUser&&!cloudSyncPaused?'this browser and the linked Supabase account':'this browser';if(!confirm('Delete the patient record and all readings from '+scope+'? This cannot be undone.'))return;
+ if(cloudUser&&!cloudSyncPaused){const removed=await supabase.from('patients').delete().eq('owner_id',cloudUser.id);if(removed.error)return say('Could not delete cloud data: '+removed.error.message,true)}
+ G.store.wipe();data={patient:null,readings:[]};showPatient();say('All data deleted.');render();if(cloudUser&&!cloudSyncPaused)cloudStatus('Cloud account connected. Its patient record and readings were deleted.')};
 /* ---- manual add ---- */
 $('mTest').onchange=fill;
 $('addManual').onclick=()=>{const r={date:$('mDate').value,test:$('mTest').value,value:$('mVal').value,unit:$('mUnit').value,fasting:$('mFast').value,source:'manual entry',origin:'user-entered',status:'reviewed'};
@@ -81,7 +145,7 @@ function render(){const rows=range();$('chartG').innerHTML=chart(rows,'glucose')
 $('histRows').onclick=e=>{const id=e.target.dataset.del;if(id){data.readings=data.readings.filter(r=>r.id!==id);persist();render()}};
 $('fFrom').onchange=$('fTo').onchange=render;
 $('lastSix').onclick=()=>{setLastSixMonths();render()};
-document.addEventListener('diacare:record-updated',()=>{data=G.store.load();showPatient();render()});
+document.addEventListener('diacare:record-updated',()=>{data=G.store.load();showPatient();render();queueCloudSave()});
 /* ---- report ---- */
 $('makeReport').onclick=()=>{const rows=range(),p=data.patient||{},n=notes(rows),g=rows.filter(r=>r.test==='glucose'&&G.toCommon(r)<70&&G.toCommon(r)!==null);
  $('reportOut').innerHTML=`<h3>DIACARE AI summary (educational, not a diagnosis)</h3>

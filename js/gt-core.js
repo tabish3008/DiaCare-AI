@@ -26,7 +26,7 @@ function toCommon(r){const v=Number(r.value);
  if(r.test==='hba1c'){if(r.unit==='%')return v;if(r.unit==='mmol/mol')return 0.0915*v+2.15}
  return null}
 const commonUnit=t=>t==='glucose'?'mg/dL':'%';
-const key=r=>[r.date,r.test,r.value,r.unit,r.fasting].join('|');
+const key=r=>[r.date,r.test,Number(r.value),r.unit,r.fasting].join('|');
 function addUnique(d,list){let added=0,dup=0;const seen=new Set(d.readings.map(key));
  for(const r of list){const k=key(r);if(seen.has(k)){dup++;continue}seen.add(k);d.readings.push(Object.assign({id:uid()},r));added++}return{added,dup}}
 /* Parser: proposes rows only. Anything uncertain is flagged; nothing is silently guessed. */

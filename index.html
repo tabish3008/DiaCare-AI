@@ -30,15 +30,21 @@
 <a href="#dashboard-section" class="mouse-wrap smoothscroll"><span class="mouse"><span class="scroll"></span></span><span class="mouse-label">Scroll</span></a></header>
 
 <section class="unslate_co--section screen-only" id="dashboard-section"><div class="container">
-<div class="notice" role="note"><strong>Educational prototype only.</strong> This site does not diagnose, predict, or recommend treatment. All data stays in this browser (localStorage) — nothing is sent anywhere. No patient readings are preloaded.</div>
+<div class="notice" role="note"><strong>Educational prototype only.</strong> This site does not diagnose, predict, or recommend treatment. No patient readings are preloaded. Records stay in this browser unless you sign in and choose to sync them to Supabase.</div>
+<div class="card-gt cloud-card" id="cloud-section" data-aos="fade-up"><h2 class="heading-h2">Supabase cloud sync</h2>
+<p>Sign in to save confirmed patient records to your DiaCare Supabase database. PDF and PNG files remain on this device and are never uploaded.</p>
+<div class="cloud-config-help" id="cloudConfigHelp" hidden>To enable cloud saving, add your Supabase <strong>publishable key</strong> to <code>js/supabase-config.js</code>, then publish the update. Never use a secret/service-role key in this website.</div>
+<form id="cloudAuthForm" class="cloud-auth-form"><div class="form-row"><div class="col-md-5 form-group"><label for="cloudEmail">Email</label><input id="cloudEmail" class="form-control" type="email" autocomplete="email" required></div><div class="col-md-5 form-group"><label for="cloudPassword">Password</label><input id="cloudPassword" class="form-control" type="password" minlength="6" autocomplete="current-password" required></div><div class="col-md-2 form-group d-flex align-items-end"><button class="btn-gt" id="cloudSignIn" type="submit">Sign in</button></div></div></form>
+<div class="cloud-actions"><button class="btn-gt btn-ghost" id="cloudSignUp" type="button">Create account</button> <button class="btn-gt btn-ghost" id="cloudSignOut" type="button" hidden>Sign out</button></div>
+<p id="cloudStatus" class="cloud-status" role="status" aria-live="polite">Cloud saving is not configured yet. Your entries are currently saved only in this browser.</p></div>
 <h2 class="heading-h2 mb-4">Patient overview</h2>
 <div class="row"><div class="col-lg-5"><div class="card-gt" data-aos="fade-up"><h3>Patient record</h3>
-<div class="form-group"><label for="pName">Name or pseudonym</label><input id="pName" class="form-control" maxlength="60" placeholder="Optional name or pseudonym"></div>
+<div class="form-group"><label for="pName">Demo label or pseudonym</label><input id="pName" class="form-control" maxlength="60" placeholder="e.g. Demo Patient A"></div>
 <div class="form-group"><label for="pFrom">From</label><input id="pFrom" type="date" class="form-control"></div>
 <div class="form-group"><label for="pTo">To</label><input id="pTo" type="date" class="form-control"></div>
 <div class="form-group"><label for="pNotes">Optional notes</label><textarea id="pNotes" class="form-control" rows="2" maxlength="500"></textarea></div>
 <button class="btn-gt" id="savePatient">Save record</button> <button class="btn-gt btn-ghost" id="wipe">Delete all data</button>
-<p class="mt-3 small" id="storeNote">Stored only in this browser’s localStorage under key “diacare.v1”. “Delete all data” removes it; clearing site data in your browser also works.</p><div id="msg" role="status" aria-live="polite"></div></div></div>
+<p class="mt-3 small" id="storeNote">Until you sign in, records stay in this browser. When signed in, confirmed readings can sync to your Supabase database. Uploaded files stay on this device.</p><div id="msg" role="status" aria-live="polite"></div></div></div>
 <div class="col-lg-7"><div class="card-gt" data-aos="fade-up"><h3>Add a reading manually</h3>
 <div class="form-row"><div class="col-sm-4 form-group"><label for="mDate">Date</label><input id="mDate" type="date" class="form-control"></div>
 <div class="col-sm-4 form-group"><label for="mTest">Test</label><select id="mTest" class="form-control"><option value="glucose">Blood glucose</option><option value="hba1c">HbA1c</option></select></div>

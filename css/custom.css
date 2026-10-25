@@ -144,5 +144,6 @@ a{color:#0c718f}
 .dc-assistant-form button,.dc-assistant-entry-actions .dc-assistant-confirm{background:#167e9c;color:#fff}
 .dc-assistant-privacy{color:#687e90}
 .dc-assistant-entry-actions button{background:#fff;color:#24536a;border-color:#a9cbd5}
+.cloud-card{margin:0 0 30px}.cloud-card>p{margin-bottom:12px}.cloud-auth-form{max-width:920px}.cloud-auth-form .form-group{margin-bottom:12px}.cloud-actions{margin-top:4px}.cloud-status{margin:14px 0 0;padding:12px 14px;border-radius:10px;background:#edf5f8;color:#24445e;font-size:14px}.cloud-config-help{margin:12px 0;padding:12px 14px;border:1px solid #e7c97d;border-radius:9px;background:#fff7e4;color:#624d22}.cloud-config-help code{color:#18354f;font-size:13px}
 @media(max-width:991px){.cover-v1#home-section{background-position:65% center}}
 @media(prefers-reduced-motion:reduce){.card-gt{transition:none}}
