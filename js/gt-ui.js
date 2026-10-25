@@ -24,16 +24,16 @@ async function loadPdfjs(){if(pdfjs)return pdfjs;pdfjs=await import('./vendor/pd
 async function pdfText(file){const lib=await loadPdfjs(),doc=await lib.getDocument({data:await file.arrayBuffer()}).promise;let out='';
  for(let p=1;p<=Math.min(doc.numPages,30);p++){const items=(await(await doc.getPage(p)).getTextContent()).items;let y=null,line='';
   for(const it of items){const yy=Math.round(it.transform[5]);if(y!==null&&Math.abs(yy-y)>3){out+=line+'\n';line=''}y=yy;line+=it.str+' '}out+=line+'\n'}return out}
-$('file').onchange=async ev=>{const f=ev.target.files[0];$('reviewBox').hidden=true;if(!f)return;const s=$('upStatus');
+$('file').onchange=async ev=>{const f=ev.target.files[0];$('reviewBox').hidden=true;$('pdfTextPreview').textContent='';if(!f)return;const s=$('upStatus');
  const isPdf=/\.pdf$/i.test(f.name)&&(f.type===''||f.type==='application/pdf'),isPng=/\.png$/i.test(f.name)&&(f.type===''||f.type==='image/png');
  if(!isPdf&&!isPng)return s.innerHTML='<div class="notice alert">Unsupported file type. Please choose a PDF or PNG.</div>';
  if(f.size>MAX)return s.innerHTML='<div class="notice alert">File is larger than 10 MB. Please use a smaller file.</div>';
  if(f.size===0)return s.innerHTML='<div class="notice alert">The file is empty.</div>';
- s.innerHTML='<div class="notice">Reading file locally…</div>';let rows=[];
- try{if(isPdf){const t=await pdfText(f);if(t.replace(/\s/g,'').length<20)throw{scan:1};rows=G.parseText(t)}else throw{scan:1}}
+ s.innerHTML='<div class="notice">Reading file locally…</div>';let rows=[],text='';
+ try{if(isPdf){text=await pdfText(f);$('pdfTextPreview').textContent=text.trim();if(text.replace(/\s/g,'').length<20)throw{scan:1};rows=G.parseText(text)}else throw{scan:1}}
  catch(e){if(e&&e.scan)s.innerHTML='<div class="notice">No selectable text found (scan or image). OCR is not bundled in this build, so nothing was extracted. Add rows by hand below, or see the README to add a local OCR engine.</div>';
   else s.innerHTML='<div class="notice alert">Could not read this file. It may be damaged, password-protected, or the local PDF engine failed to load (open the site through a local server — see README). You can still add rows manually.</div>'}
- if(rows.length)s.innerHTML=`<div class="notice">Found ${rows.length} possible value(s). Please check each one.</div>`;
+ if(rows.length)s.innerHTML=`<div class="notice">Found ${rows.length} possible value(s). Please check each one.</div>`;else if(text)s.innerHTML='<div class="notice">Text was extracted, but no likely glucose or HbA1c values were recognized. Inspect the extracted text below and add readings manually if needed.</div>';
  pending=rows.map(r=>({...r,source:f.name,origin:'imported'}));if(!rows.length&&!s.innerHTML.includes('alert'))pending=[];
  drawReview();$('reviewBox').hidden=false;ev.target.value=''};
 function drawReview(){$('revRows').innerHTML=pending.map((r,i)=>{const nr=r.uncertain||!r.date||!r.unit;return `<tr data-i="${i}">
@@ -51,6 +51,9 @@ $('revSave').onclick=()=>{const good=[],bad=[];pending.forEach((r,i)=>{const e=G
  if(bad.length)return $('upStatus').innerHTML=`<div class="notice alert">${bad.map(esc).join('<br>')}</div>`;
  const x=G.addUnique(data,good);persist();pending=[];$('reviewBox').hidden=true;$('upStatus').innerHTML=`<div class="notice">Saved ${x.added} reviewed reading(s); ${x.dup} duplicate(s) skipped.</div>`;render()};
 /* ---- filters, charts, history ---- */
+const localISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function shiftMonths(iso,amount){const [y,m,day]=iso.split('-').map(Number),d=new Date(y,m-1,1);d.setMonth(d.getMonth()+amount);d.setDate(Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));return localISO(d)}
+function setLastSixMonths(){const today=localISO(new Date());$('fTo').value=today;$('fFrom').value=shiftMonths(today,-6)}
 const range=()=>{const f=$('fFrom').value,t=$('fTo').value;return data.readings.filter(r=>(!f||r.date>=f)&&(!t||r.date<=t)).sort((a,b)=>a.date.localeCompare(b.date))};
 function chart(rows,test){const pts=rows.filter(r=>r.test===test&&G.toCommon(r)!==null),u=G.commonUnit(test);
  if(!pts.length)return '<p>No reviewed readings in this range.</p>';
@@ -67,23 +70,28 @@ function gaps(rows){if(!rows.length)return[];const have=new Set(rows.map(r=>r.da
 function notes(rows){const n=[],unk=rows.filter(r=>G.toCommon(r)===null).length,mixed=[...new Set(rows.map(r=>r.test+' '+r.unit))],g=gaps(rows);
  if(mixed.length>[...new Set(rows.map(r=>r.test))].length)n.push('Readings use more than one unit; charts show values converted to mg/dL (glucose) or % (HbA1c), and each original value is kept in the table.');
  if(unk)n.push(`${unk} reading(s) have an unknown unit and are not charted.`);if(g.length)n.push(`No readings in: ${g.join(', ')}.`);return n}
+function describe(rows,test){const pts=rows.filter(r=>r.test===test&&G.toCommon(r)!==null).sort((a,b)=>a.date.localeCompare(b.date));if(!pts.length)return `<p>No chartable ${test==='glucose'?'glucose':'HbA1c'} readings in this period.</p>`;
+ const values=pts.map(G.toCommon),min=Math.min(...values),max=Math.max(...values),first=pts[0],last=pts.at(-1),unit=G.commonUnit(test),delta=G.toCommon(last)-G.toCommon(first),direction=delta>0?'increased':delta<0?'decreased':'did not change';
+ return `<p><strong>${test==='glucose'?'Glucose':'HbA1c'}:</strong> ${pts.length} chartable reading(s). Earliest: ${esc(first.date)} (${G.toCommon(first).toFixed(1)} ${unit}); latest: ${esc(last.date)} (${G.toCommon(last).toFixed(1)} ${unit}). Recorded minimum ${min.toFixed(1)} and maximum ${max.toFixed(1)} ${unit}. From first to last, the value ${direction} by ${Math.abs(delta).toFixed(1)} ${unit}. Descriptive comparison only; it is not a diagnosis or target. Glucose readings may have different fasting conditions.</p>`}
 function render(){const rows=range();$('chartG').innerHTML=chart(rows,'glucose');$('chartA').innerHTML=chart(rows,'hba1c');
  const gl=rows.filter(r=>r.test==='glucose'),hb=rows.filter(r=>r.test==='hba1c');
- $('stats').innerHTML=rows.length?`<p>${rows.length} reviewed reading(s): ${gl.length} glucose, ${hb.length} HbA1c, from ${esc(rows[0].date)} to ${esc(rows.at(-1).date)}. Descriptive only — no score, diagnosis or prediction.</p>`:'<p>No readings yet. Add one above or upload a report to get started.</p>';
+ $('stats').innerHTML=rows.length?`<p>${rows.length} reviewed reading(s) between ${esc($('fFrom').value)} and ${esc($('fTo').value)}. Descriptive only — not a diagnosis or prediction.</p>${describe(rows,'glucose')}${describe(rows,'hba1c')}`:'<p>No readings in this date range yet. Add a reading above or upload a report to get started.</p>';
  $('unitNote').innerHTML=notes(rows).map(t=>`<div class="notice">${esc(t)}</div>`).join('');
  $('histRows').innerHTML=rows.map(r=>{const c=G.toCommon(r),low=r.test==='glucose'&&c!==null&&c<70;return `<tr><td>${esc(r.date)}</td><td>${r.test==='hba1c'?'HbA1c':'Glucose'}</td><td>${esc(r.value)} ${esc(r.unit)} ${low?'<span class="tag lowt">Low — attention</span>':''}</td><td>${esc(r.fasting)}</td><td>${esc(r.source)}</td><td>${esc(r.origin)}</td><td>${esc(r.status)}</td><td><button class="btn-gt btn-ghost" data-del="${esc(r.id)}" aria-label="Delete reading from ${esc(r.date)}">✕</button></td></tr>`}).join('')||'<tr><td colspan="8">Empty.</td></tr>'}
 $('histRows').onclick=e=>{const id=e.target.dataset.del;if(id){data.readings=data.readings.filter(r=>r.id!==id);persist();render()}};
 $('fFrom').onchange=$('fTo').onchange=render;
+$('lastSix').onclick=()=>{setLastSixMonths();render()};
 document.addEventListener('diacare:record-updated',()=>{data=G.store.load();showPatient();render()});
 /* ---- report ---- */
 $('makeReport').onclick=()=>{const rows=range(),p=data.patient||{},n=notes(rows),g=rows.filter(r=>r.test==='glucose'&&G.toCommon(r)<70&&G.toCommon(r)!==null);
  $('reportOut').innerHTML=`<h3>DIACARE AI summary (educational, not a diagnosis)</h3>
-<p><strong>Patient (pseudonym):</strong> ${esc(p.name||'not set')} &nbsp; <strong>Range:</strong> ${esc($('fFrom').value||rows[0]?.date||'—')} to ${esc($('fTo').value||rows.at(-1)?.date||'—')} &nbsp; <strong>Generated:</strong> ${new Date().toISOString().slice(0,10)}</p>
+<p><strong>Patient (pseudonym):</strong> ${esc(p.name||'not set')} &nbsp; <strong>Range:</strong> ${esc($('fFrom').value||'—')} to ${esc($('fTo').value||'—')} &nbsp; <strong>Generated:</strong> ${localISO(new Date())}</p>
 <div class="notice">Please verify this summary against the original lab reports. This summary is not a diagnosis or treatment recommendation.</div>
+<h4>Descriptive analysis for selected period</h4>${describe(rows,'glucose')}${describe(rows,'hba1c')}
 <h4>Glucose</h4>${chart(rows,'glucose')}<h4>HbA1c (reflects roughly the previous 2–3 months)</h4>${chart(rows,'hba1c')}
 <h4>Reviewed readings (${rows.length})</h4><table class="tbl"><tr><th>Date</th><th>Test</th><th>Original value</th><th>Fasting</th><th>Source</th><th>Origin</th></tr>${rows.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.test)}</td><td>${esc(r.value)} ${esc(r.unit)}</td><td>${esc(r.fasting)}</td><td>${esc(r.source)}</td><td>${r.origin==='imported'?'Imported':'User-entered'}</td></tr>`).join('')}</table>
 <h4>Uncertainties &amp; data notes</h4><ul>${(n.length?n:['None flagged.']).map(t=>`<li>${esc(t)}</li>`).join('')}${g.length?`<li>${g.length} glucose value(s) below 70 mg/dL were flagged for attention; discuss with your care team.</li>`:''}<li>Imported values were extracted automatically and confirmed by the user on a review screen; fasting status is “unknown” unless stated in the source.</li></ul>
 <h4>Questions for a healthcare professional</h4><ul><li>What are my personal glucose and HbA1c targets?</li><li>Do any of these readings need follow-up or repeat testing?</li><li>How often should I test, and under what conditions?</li><li>Could any supplement or traditional product I use interact with my medicines?</li><li>What kind of physical activity is suitable for me?</li></ul>
-<h4>Sources</h4><p class="small">NIDDK: Diabetes Tests &amp; Diagnosis; Low Blood Glucose; The A1C Test. NCCIH: Ayurvedic Medicine In Depth.</p>`};
+<h4>Sources</h4><ul><li><a href="https://www.niddk.nih.gov/health-information/diabetes/overview/tests-diagnosis" rel="noopener">NIDDK — Diabetes Tests &amp; Diagnosis</a></li><li><a href="https://www.niddk.nih.gov/health-information/diagnostic-tests/A1C-test" rel="noopener">NIDDK — The A1C Test</a></li><li><a href="https://www.niddk.nih.gov/health-information/diabetes/overview/preventing-problems/low-blood-glucose-hypoglycemia" rel="noopener">NIDDK — Low Blood Glucose</a></li><li><a href="https://www.nccih.nih.gov/health/ayurvedic-medicine-in-depth" rel="noopener">NCCIH — Ayurvedic Medicine: In Depth</a></li><li><a href="https://www.nccih.nih.gov/health/yoga-effectiveness-and-safety" rel="noopener">NCCIH — Yoga: Effectiveness and Safety</a></li></ul>`};
 $('printReport').onclick=()=>{if(!$('reportOut').innerHTML.trim())$('makeReport').click();window.print()};
-fill();showPatient();render();
+setLastSixMonths();fill();showPatient();render();

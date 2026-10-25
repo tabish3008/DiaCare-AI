@@ -14,7 +14,7 @@
 <li><a href="#home-section" class="nav-link">Home</a></li><li><a href="#dashboard-section" class="nav-link">Dashboard</a></li><li><a href="#upload-section" class="nav-link">Upload</a></li></ul></div>
 <div class="site-logo pos-absolute"><a href="#home-section" class="unslate_co--site-logo">DIACARE AI</a></div>
 <div class="col-md-5 text-right text-lg-left"><ul class="site-nav-ul js-clone-nav text-left d-none d-lg-inline-block">
-<li><a href="#report-section" class="nav-link">Report</a></li><li><a href="#ayurveda-section" class="nav-link">Ayurveda</a></li></ul>
+<li><a href="#report-section" class="nav-link">Report</a></li><li><a href="#ayurveda-section" class="nav-link">Ayurveda</a></li><li><a href="#sources-section" class="nav-link">Sources</a></li></ul>
 <ul class="site-nav-ul-none-onepage text-right d-inline-block d-lg-none"><li><a href="#" class="js-menu-toggle">Menu</a></li></ul></div>
 </div></div></nav>
 
@@ -51,15 +51,16 @@
 <section class="unslate_co--section screen-only" id="upload-section"><div class="container">
 <h2 class="heading-h2 mb-4">Upload a report</h2>
 <div class="card-gt" data-aos="fade-up"><div class="drop"><label for="file">Choose a PDF or PNG (max 10 MB)</label><br><input id="file" type="file" accept=".pdf,.png,application/pdf,image/png">
-<p class="mt-3 small">Files are read in your browser and discarded after parsing — they are not uploaded or saved. Text PDFs are read with a local copy of PDF.js. Scanned PDFs and PNGs need an OCR engine that is <em>not</em> bundled (see README); until then you can enter values by hand on the review screen. No camera is used.</p></div>
+<p class="mt-3 small">Files are read in your browser and discarded after parsing — they are not uploaded or saved. Text PDFs are read with a local copy of PDF.js, and extracted text is shown for review. Scanned PDFs and PNGs need OCR, which is not bundled in this version; you can enter values by hand. No camera is used.</p></div>
 <div id="upStatus" role="status" aria-live="polite" class="mt-3"></div>
 <div id="reviewBox" hidden><h3 class="mt-4">Review extracted values</h3><p>Nothing is saved until you confirm. Edit, reject, or add rows. Rows marked “Needs review” are uncertain.</p>
+<details class="mt-3 mb-3"><summary>View all text extracted from this PDF</summary><pre id="pdfTextPreview" class="pdf-text-preview"></pre></details>
 <div class="chart-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Test</th><th>Value</th><th>Unit</th><th>Fasting</th><th>Status</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody id="revRows"></tbody></table></div>
 <button class="btn-gt btn-ghost mt-3" id="revAdd">Add row</button> <button class="btn-gt mt-3" id="revSave">Confirm &amp; save reviewed rows</button></div></div></div></section>
 
 <section class="unslate_co--section screen-only" id="history-section"><div class="container">
 <h2 class="heading-h2 mb-4">History &amp; trends</h2>
-<div class="card-gt" data-aos="fade-up"><div class="form-row"><div class="col-sm-4 form-group"><label for="fFrom">From</label><input id="fFrom" type="date" class="form-control"></div><div class="col-sm-4 form-group"><label for="fTo">To</label><input id="fTo" type="date" class="form-control"></div></div>
+<div class="card-gt" data-aos="fade-up"><p class="small">Charts and reports start with the six months ending today. Change the dates for a different period.</p><div class="form-row"><div class="col-sm-4 form-group"><label for="fFrom">From</label><input id="fFrom" type="date" class="form-control"></div><div class="col-sm-4 form-group"><label for="fTo">To</label><input id="fTo" type="date" class="form-control"></div><div class="col-sm-4 form-group d-flex align-items-end"><button class="btn-gt btn-ghost" id="lastSix" type="button">Use last 6 months</button></div></div>
 <div id="stats"></div>
 <h3>Blood glucose (single measurements)</h3><div class="chart-wrap" id="chartG"></div>
 <h3 class="mt-4">HbA1c (reflects roughly the previous 2–3 months)</h3><div class="chart-wrap" id="chartA"></div>
@@ -76,6 +77,10 @@
 <div class="card-gt" data-aos="fade-up"><p>Ayurveda is a traditional system of medicine that originated in India and is practised widely today. Per NCCIH, evidence for Ayurvedic treatments for diabetes is limited, and some preparations have been found to contain harmful metals such as lead, mercury or arsenic, or to interact with medicines. This site does not recommend any herb, kadha, supplement or product, and never suggests one based on a glucose reading. Do not start, stop, or change prescribed medicine on your own.</p>
 <h3>Questions to take to your clinician</h3><ul><li>Could this product interact with my prescribed medicines?</li><li>Is this product independently tested for contaminants?</li><li>Could it affect my blood glucose or the way I monitor it?</li><li>Is it safe alongside my other conditions or if I am pregnant?</li></ul>
 <p class="src-list"><a href="https://www.nccih.nih.gov/health/ayurvedic-medicine-in-depth" rel="noopener">NCCIH — Ayurvedic Medicine: In Depth</a></p></div></div></section>
+<section class="unslate_co--section screen-only" id="sources-section"><div class="container"><h2 class="heading-h2 mb-4">Sources &amp; safety</h2><div class="row">
+<div class="col-lg-6"><div class="card-gt"><h3>Understanding your records</h3><p>This prototype organizes user-provided readings and gives descriptive summaries. It does not diagnose diabetes. HbA1c reflects roughly the previous three months and is displayed separately from individual glucose tests.</p><ul class="src-list"><li><a href="https://www.niddk.nih.gov/health-information/diabetes/overview/tests-diagnosis" rel="noopener">NIDDK — Diabetes Tests &amp; Diagnosis</a></li><li><a href="https://www.niddk.nih.gov/health-information/diagnostic-tests/A1C-test" rel="noopener">NIDDK — The A1C Test</a></li><li><a href="https://www.niddk.nih.gov/health-information/diabetes/overview/preventing-problems/low-blood-glucose-hypoglycemia" rel="noopener">NIDDK — Low Blood Glucose</a></li></ul></div></div>
+<div class="col-lg-6"><div class="card-gt"><h3>Movement &amp; yoga</h3><p>This site does not choose yoga poses, intensity, or schedule from glucose results. Individual health conditions may affect activity safety. Ask a qualified healthcare professional and instructor what is appropriate.</p><p class="src-list"><a href="https://www.nccih.nih.gov/health/yoga-effectiveness-and-safety" rel="noopener">NCCIH — Yoga: Effectiveness and Safety</a></p></div></div></div>
+<div class="notice">Information is educational. Do not start, stop, or change diabetes medicine or supplements based on this website. Discuss readings and any traditional products with a qualified healthcare professional.</div></div></section>
 </div>
 <footer class="unslate_co--footer unslate_co--section screen-only"><div class="container text-center"><p>DIACARE AI is an educational prototype, not a medical device. It does not diagnose or replace advice from a licensed clinician.</p></div></footer></div>
 <div id="unslate_co--overlayer"></div><div class="site-loader-wrap"><div class="site-loader"></div></div>
