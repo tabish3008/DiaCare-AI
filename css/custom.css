@@ -98,6 +98,7 @@ label{color:var(--tx);font-size:14px;margin-bottom:4px}
 
 /* --- Bright clinical theme and local medical imagery --- */
 :root{--bg:#f2f7fb;--surf:#ffffff;--line:#d7e4ed;--tx:#18354f;--mut:#526b80;--ac:#147d9b;--warn:#9a6500;--bad:#b53e4b}
+.lines-wrap{display:none!important}
 html,body,.unslate_co--site-inner,.unslate_co--footer{background-color:var(--bg);color:var(--tx)}
 body{background-image:radial-gradient(ellipse at 10% 13%,rgba(33,139,166,.055),transparent 34%),radial-gradient(ellipse at 92% 51%,rgba(63,151,170,.05),transparent 30%)}
 p,li,label,td,th,small{color:var(--mut)}
