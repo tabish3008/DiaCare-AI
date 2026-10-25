@@ -95,3 +95,52 @@ label{color:var(--tx);font-size:14px;margin-bottom:4px}
 @media(max-width:991px) { .cover-v1#home-section { min-height: 0; padding-top: 140px; padding-bottom: 34px; } .hero-art { margin-bottom: 22px; } .unslate_co--section { padding-top: 72px; padding-bottom: 72px; } }
 @media(max-width:575px) { .dc-assistant-launcher { right: 14px; bottom: 14px; min-height: 52px; padding: 0 15px; } .dc-assistant-panel { right: 10px; bottom: 76px; width: calc(100vw - 20px); height: min(620px,calc(100dvh - 92px)); min-height: 360px; } .dc-assistant-message { max-width: 95%; } }
 @media(prefers-reduced-motion:reduce) { .card-gt,.dc-assistant-launcher { transition: none; } .dc-assistant-messages { scroll-behavior: auto; } }
+
+/* --- Bright clinical theme and local medical imagery --- */
+:root{--bg:#f2f7fb;--surf:#ffffff;--line:#d7e4ed;--tx:#18354f;--mut:#526b80;--ac:#147d9b;--warn:#9a6500;--bad:#b53e4b}
+html,body,.unslate_co--site-inner,.unslate_co--footer{background-color:var(--bg);color:var(--tx)}
+body{background-image:radial-gradient(ellipse at 10% 13%,rgba(33,139,166,.055),transparent 34%),radial-gradient(ellipse at 92% 51%,rgba(63,151,170,.05),transparent 30%)}
+p,li,label,td,th,small{color:var(--mut)}
+h1,h2,h3,h4,.heading-h2,.heading-h3{color:var(--tx)}
+a{color:#0c718f}
+.cover-v1#home-section{background-color:#eaf4fa;background-image:linear-gradient(90deg,rgba(244,249,252,.91) 0%,rgba(244,249,252,.76) 40%,rgba(244,249,252,.06) 100%),url('../images/diacare-medical-bg.png');background-size:cover;background-position:center 54%}
+.cover-v1#home-section .heading{color:#14334d;text-shadow:0 1px 0 rgba(255,255,255,.4)}
+.cover-v1#home-section .subheading{color:#45647c}
+.hero-eyebrow{color:#0d718e}.hero-eyebrow span{background:#31a6a8;box-shadow:0 0 14px rgba(49,166,168,.42)}
+.hero-art{display:none}
+.unslate_co--site-nav{background:rgba(250,253,255,.94);border-bottom:1px solid rgba(30,77,106,.1)}
+.unslate_co--site-nav.scrolled{background:rgba(250,253,255,.96)!important;box-shadow:0 4px 22px rgba(24,53,79,.08)}
+.unslate_co--site-nav .unslate_co--site-logo,.unslate_co--site-nav .site-nav-ul>li>a,.site-nav-ul-none-onepage>li>a{color:#18354f}
+.unslate_co--site-nav .site-nav-ul>li>a:hover,.site-nav-ul>li>a.active{color:#0b8099}
+.unslate_co--site-mobile-menu{background:#f7fbfd;color:#18354f}
+.unslate_co--section:nth-of-type(even){background:rgba(220,236,245,.36)}
+#dashboard-section{background-image:linear-gradient(180deg,rgba(242,248,252,.94),rgba(242,248,252,.97)),url('../images/diacare-medical-bg.png');background-size:cover;background-position:center 68%}
+.card-gt{background:rgba(255,255,255,.96);border-color:#d9e6ee;box-shadow:0 14px 40px rgba(28,72,101,.08)}
+.card-gt:hover{border-color:#a8cedb;box-shadow:0 18px 44px rgba(28,72,101,.12)}
+.card-gt h3{color:#183d58}
+.notice{background:#fff8e9;border-color:#edcf8b;color:#4c4b43}.notice.alert{background:#fff1f1;border-color:#e5b4bb}
+.form-control,select.form-control,.form-control:focus{background:#fff;border-color:#bfd1de;color:#18354f}
+.btn-gt{background:#167e9c;color:#fff;box-shadow:0 5px 12px rgba(17,105,135,.14)}
+.btn-gt:hover{filter:brightness(1.06);color:#fff}
+.btn-ghost{background:#fff;color:#176d86;border-color:#9ec9d5;box-shadow:none}
+.tag.ok{background:#d8f0ec;color:#17635e}.tag.rev{background:#fff0cc;color:#684500}.tag.lowt{background:#ffe0e3;color:#8b2634}
+#stats{background:rgba(255,255,255,.86);border-color:#d7e4ed}
+.tbl th{color:#18354f}.tbl td{color:#526b80}
+.drop{border-color:#6bb8c7;background:rgba(232,246,250,.75)}
+.dc-assistant-launcher{background:linear-gradient(135deg,#197f9c,#24a4a5);color:#fff;box-shadow:0 12px 34px rgba(17,71,92,.23),0 0 24px rgba(20,125,155,.12)}
+.dc-assistant-launcher:hover{color:#fff}
+.dc-assistant-panel{background:#fbfdff;color:#18354f;border-color:#c9dce7;box-shadow:0 25px 80px rgba(25,64,91,.25)}
+.dc-assistant-header{background:linear-gradient(120deg,#e7f4f8,#f4f9fc);border-color:#d8e6ee}
+.dc-assistant-heading h2{color:#18354f}.dc-assistant-heading p{color:#62798c}
+.dc-assistant-header button{color:#18354f}
+.dc-assistant-safety{background:#fff7e4;color:#72561f;border-color:#efe1bd}
+.dc-assistant-message{background:#edf4f8;color:#24445e}
+.dc-assistant-message--user{background:#197f9c;color:#fff}
+.dc-assistant-suggestions button{border-color:#a4d0da;color:#176b84}.dc-assistant-suggestions button:hover{background:#e6f4f7}
+.dc-assistant-form,.dc-assistant-privacy,.dc-assistant-entry-actions{background:#f3f8fb;border-color:#dbe7ee}
+.dc-assistant-form input{background:#fff;border-color:#c7d9e4;color:#18354f}.dc-assistant-form input::placeholder{color:#71889a}
+.dc-assistant-form button,.dc-assistant-entry-actions .dc-assistant-confirm{background:#167e9c;color:#fff}
+.dc-assistant-privacy{color:#687e90}
+.dc-assistant-entry-actions button{background:#fff;color:#24536a;border-color:#a9cbd5}
+@media(max-width:991px){.cover-v1#home-section{background-position:65% center}}
+@media(prefers-reduced-motion:reduce){.card-gt{transition:none}}
