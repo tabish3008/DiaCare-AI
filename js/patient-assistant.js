@@ -1,4 +1,4 @@
-/* DIACARE AI - Direct Google-Powered Education and Patient Record Assistant */
+/* DIACARE AI - Server-powered Education and Patient Record Assistant */
 (function () {
   'use strict';
 
@@ -15,7 +15,7 @@
       .replace(/'/g, '&#39;');
   }
 
-  // Safe Markdown renderer for Google API responses
+  // Safe Markdown renderer for Ask Direct AI responses
   function renderMarkdown(text) {
     if (!text) return '';
     var escaped = esc(text);
@@ -66,10 +66,10 @@
   var launcher = document.createElement('button');
   launcher.className = 'dc-assistant-launcher';
   launcher.type = 'button';
-  launcher.setAttribute('aria-label', 'Open DiaCare Google AI Assistant');
+  launcher.setAttribute('aria-label', 'Open DiaCare Ask Direct AI Assistant');
   launcher.setAttribute('aria-expanded', 'false');
   launcher.setAttribute('aria-controls', 'dc-assistant-panel');
-  launcher.innerHTML = '<span class="dc-assistant-launcher__icon" aria-hidden="true">✦</span><span>Ask Google AI</span>';
+  launcher.innerHTML = '<span class="dc-assistant-launcher__icon" aria-hidden="true">✦</span><span>Ask Direct AI</span>';
 
   // Create Assistant Panel
   var panel = document.createElement('section');
@@ -84,43 +84,27 @@
       '<div class="dc-assistant-avatar" aria-hidden="true">✦</div>',
       '<div class="dc-assistant-heading">',
         '<h2 id="dc-assistant-title">DIACARE AI</h2>',
-        '<p id="dc-assistant-status-desc">Direct Google Search Grounding</p>',
+        '<p id="dc-assistant-status-desc">Server-powered educational answers</p>',
       '</div>',
-      '<button class="dc-assistant-key-toggle" type="button" title="Configure Google API Key" aria-label="Configure Google API Key">🔑 Key</button>',
       '<button class="dc-assistant-clear" type="button" title="Clear conversation">Clear</button>',
       '<button class="dc-assistant-close" type="button" aria-label="Close assistant">×</button>',
     '</header>',
-    '<div class="dc-assistant-key-drawer" id="dc-assistant-key-drawer" hidden>',
-      '<div class="dc-assistant-key-header">',
-        '<strong>Google Gemini API Setup</strong>',
-        '<span class="dc-assistant-status-pill" id="dc-key-status-pill"><span class="dot off"></span> Disconnected</span>',
-      '</div>',
-      '<p class="dc-key-help">Connect your free Google Gemini API key to directly answer any diabetes, medical, or general question with live Google Search grounding.</p>',
-      '<form class="dc-assistant-key-form" id="dc-key-form">',
-        '<input type="password" class="dc-assistant-key-input" id="dc-key-input" placeholder="Paste Google API key (AIzaSy...)" autocomplete="off">',
-        '<button type="submit" class="dc-assistant-key-btn">Save</button>',
-        '<button type="button" class="dc-assistant-key-btn danger" id="dc-key-remove" hidden>Remove</button>',
-      '</form>',
-      '<div class="dc-key-links">',
-        '<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Get a free Google Gemini key at Google AI Studio ↗</a>',
-      '</div>',
-    '</div>',
     '<div class="dc-assistant-safety">',
-      'Directly answers questions using Google Search &amp; Gemini AI. Includes clinical references &amp; sources. Educational only — not medical advice.',
+      'Ask general health questions and get educational answers with source links. Not medical advice.',
     '</div>',
     '<div class="dc-assistant-modebar" role="tablist" aria-label="Assistant mode">',
-      '<button type="button" role="tab" aria-selected="true" data-mode="google">✦ Ask Google (Direct)</button>',
+      '<button type="button" role="tab" aria-selected="true" data-mode="direct">✦ Ask Direct AI</button>',
       '<button type="button" role="tab" aria-selected="false" data-mode="history">📋 Local History Only</button>',
     '</div>',
     '<div class="dc-assistant-messages" id="dc-assistant-messages" aria-live="polite" aria-relevant="additions"></div>',
     '<div class="dc-assistant-suggestions" aria-label="Suggested questions"></div>',
     '<form class="dc-assistant-form" id="dc-assistant-form">',
-      '<label class="sr-only" for="dc-assistant-input">Ask any question with Google</label>',
-      '<input id="dc-assistant-input" maxlength="500" autocomplete="off" placeholder="Ask any question with Google (e.g. diabetes, diet, readings)…" required>',
+      '<label class="sr-only" for="dc-assistant-input">Ask a general question</label>',
+      '<input id="dc-assistant-input" maxlength="400" autocomplete="off" placeholder="Ask a general health question…" required>',
       '<button type="submit" aria-label="Send question">↑</button>',
     '</form>',
     '<div class="dc-assistant-entry-actions" hidden></div>',
-    '<p class="dc-assistant-privacy">Your inquiries stay in this browser. Answers are directly retrieved from Google API.</p>'
+    '<p class="dc-assistant-privacy">General questions are sent securely to the server for an educational answer. Do not include personal health details.</p>'
   ].join('');
 
   document.body.appendChild(launcher);
@@ -130,21 +114,13 @@
   var input = panel.querySelector('#dc-assistant-input');
   var suggestionBox = panel.querySelector('.dc-assistant-suggestions');
   var entryActions = panel.querySelector('.dc-assistant-entry-actions');
-  var keyDrawer = panel.querySelector('#dc-assistant-key-drawer');
-  var keyToggle = panel.querySelector('.dc-assistant-key-toggle');
-  var keyForm = panel.querySelector('#dc-key-form');
-  var keyInput = panel.querySelector('#dc-key-input');
-  var keyRemove = panel.querySelector('#dc-key-remove');
-  var keyStatusPill = panel.querySelector('#dc-key-status-pill');
-  var statusDesc = panel.querySelector('#dc-assistant-status-desc');
 
   var entryDraft = null;
-  var mode = 'google';
+  var mode = 'direct';
 
-  var googleExamples = [
+  var directExamples = [
     'What is HbA1c and how is it tested?',
     'What are normal fasting glucose levels?',
-    'Summarize my saved glucose readings',
     'Can yoga help manage blood sugar?',
     'What foods cause blood sugar spikes?'
   ];
@@ -156,34 +132,6 @@
     'What is my highest glucose reading?',
     'Add a glucose reading'
   ];
-
-  function getGoogleClient() {
-    return window.DiaCareGoogle || null;
-  }
-
-  function hasGoogleKey() {
-    var client = getGoogleClient();
-    return Boolean(client && client.hasApiKey());
-  }
-
-  function updateKeyStatusUI() {
-    var hasKey = hasGoogleKey();
-    if (hasKey) {
-      keyStatusPill.innerHTML = '<span class="dot"></span> Connected';
-      keyStatusPill.classList.remove('off');
-      keyRemove.hidden = false;
-      keyToggle.innerHTML = '🔑 Key ✓';
-      keyToggle.style.color = '#147d9b';
-      statusDesc.textContent = 'Google API Connected (Search Grounded)';
-    } else {
-      keyStatusPill.innerHTML = '<span class="dot off"></span> Not Configured';
-      keyStatusPill.classList.add('off');
-      keyRemove.hidden = true;
-      keyToggle.innerHTML = '🔑 Key';
-      keyToggle.style.color = '';
-      statusDesc.textContent = 'Enter API Key to link Google';
-    }
-  }
 
   function freshRecord() {
     var saved = G.store.load();
@@ -255,7 +203,7 @@
 
     var wrap = document.createElement('div');
     wrap.className = 'dc-assistant-sources';
-    wrap.innerHTML = '<strong><span aria-hidden="true">🌐</span> Sources from Google:</strong>';
+    wrap.innerHTML = '<strong><span aria-hidden="true">🌐</span> Sources:</strong>';
 
     var list = document.createElement('ul');
     clean.forEach(function (source) {
@@ -275,14 +223,14 @@
   }
 
   function switchMode(next) {
-    mode = next === 'history' ? 'history' : 'google';
+    mode = next === 'history' ? 'history' : 'direct';
     panel.querySelectorAll('.dc-assistant-modebar [data-mode]').forEach(function (button) {
       button.setAttribute('aria-selected', button.dataset.mode === mode ? 'true' : 'false');
     });
 
-    if (mode === 'google') {
-      input.placeholder = 'Ask any question with Google (e.g. diabetes, diet, readings)…';
-      addMessage('Switched to <strong>Ask Google</strong> mode. You can ask any question directly, backed by live Google Search grounding.', 'assistant', true);
+    if (mode === 'direct') {
+      input.placeholder = 'Ask a general health question…';
+      addMessage('Switched to <strong>Ask Direct AI</strong> mode. Ask general educational questions using web search.', 'assistant', true);
     } else {
       input.placeholder = 'Ask about this browser’s saved patient records…';
       addMessage('Switched to <strong>Local History</strong> mode. Answers use only the records saved in this browser without network calls.', 'assistant', true);
@@ -434,7 +382,7 @@
     var selected = askedA1c ? a1c : askedGlucose ? glucose : [];
 
     if (/^(\s*)(hi|hello|hey|namaste)\b/.test(q) || /what can you do|help/.test(q)) {
-      return 'I am connected to Google API to directly answer any medical, diabetes, or general question with Google Search. I can also summarize your saved records, analyze readings, or add new test entries.';
+      return 'I can help summarize saved readings and add reviewed entries in Local History mode. Ask Direct AI answers general educational questions after you sign in from the Dashboard.';
     }
     if (/note|medication list|patient detail|profile|record details|name/.test(q) && !askedGlucose && !askedA1c) {
       var p = record.patient;
@@ -471,7 +419,7 @@
 
   function showSuggestions() {
     suggestionBox.textContent = '';
-    var list = mode === 'google' ? googleExamples : historyExamples;
+    var list = mode === 'direct' ? directExamples : historyExamples;
     list.forEach(function (example) {
       var btn = document.createElement('button');
       btn.type = 'button';
@@ -483,110 +431,29 @@
     });
   }
 
-  // --- Inline API Key Setup Card inside chat ---
-  function showInlineKeySetup(pendingQuestion) {
-    var item = document.createElement('div');
-    item.className = 'dc-assistant-message dc-assistant-message--assistant dc-inline-key-card';
-    item.innerHTML = [
-      '<div class="dc-inline-key-wrap">',
-        '<strong><span aria-hidden="true">🔑</span> Link Google Gemini API</strong>',
-        '<p>To directly answer any question with live Google Search grounding, enter your free Google Gemini API key:</p>',
-        '<div class="dc-inline-key-row">',
-          '<input type="password" class="dc-inline-key-input" placeholder="Paste Gemini API key (AIzaSy...)" autocomplete="off">',
-          '<button type="button" class="dc-inline-key-btn">Connect &amp; Ask</button>',
-        '</div>',
-        '<p class="dc-inline-key-sub"><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Get a free API key at Google AI Studio ↗</a></p>',
-      '</div>'
-    ].join('');
-
-    var keyInp = item.querySelector('.dc-inline-key-input');
-    var keyBtn = item.querySelector('.dc-inline-key-btn');
-
-    function handleSave() {
-      var val = keyInp.value.trim();
-      if (!val) {
-        keyInp.focus();
-        return;
-      }
-      var client = getGoogleClient();
-      if (client) {
-        client.setApiKey(val);
-      }
-      updateKeyStatusUI();
-      item.innerHTML = '<strong>✓ Google API Linked!</strong> Answering your question now…';
-      setTimeout(function () {
-        if (pendingQuestion) {
-          executeGoogleAsk(pendingQuestion);
-        }
-      }, 500);
-    }
-
-    keyBtn.addEventListener('click', handleSave);
-    keyInp.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleSave();
-      }
-    });
-
-    log.appendChild(item);
-    log.scrollTop = log.scrollHeight;
-    keyInp.focus();
-  }
-
-  // --- Core Asking Function ---
-  async function executeGoogleAsk(question) {
-    var client = getGoogleClient();
-    if (!client || !client.hasApiKey()) {
-      showInlineKeySetup(question);
-      return;
-    }
-
-    // Add loading indicator
+  // --- Server-side Direct AI request ---
+  async function executeDirectAsk(question) {
     var loadingItem = document.createElement('div');
     loadingItem.className = 'dc-assistant-message dc-assistant-message--assistant dc-assistant-loading';
     loadingItem.innerHTML = [
-      '<span class="dc-assistant-loading-text">Searching Google &amp; preparing answer</span>',
+      '<span class="dc-assistant-loading-text">Preparing your answer</span>',
       '<span class="dc-assistant-loading-dots"><span></span><span></span><span></span></span>'
     ].join(' ');
     log.appendChild(loadingItem);
     log.scrollTop = log.scrollHeight;
 
-    var record = freshRecord();
-    var patientContext = summarizePatientContext(record);
-
     try {
-      var result = await client.askGoogle(question, {
-        patientContext: patientContext
-      });
-
-      loadingItem.remove();
-
-      var formatted = renderMarkdown(result.answer);
-      var reply = addMessage(formatted, 'assistant', true);
-
-      if (result.sources && result.sources.length) {
-        addSources(reply, result.sources);
+      var service = window.DiaCareCloud;
+      if (!service || typeof service.askEducation !== 'function') {
+        throw new Error('Ask Direct AI is not configured yet.');
       }
+      var result = await service.askEducation(question);
+      loadingItem.remove();
+      var reply = addMessage(renderMarkdown(result.answer), 'assistant', true);
+      if (result.sources && result.sources.length) addSources(reply, result.sources);
     } catch (err) {
       loadingItem.remove();
-
-      if (err.code === 'NO_API_KEY' || err.code === 'INVALID_API_KEY') {
-        addMessage('Google API Error: ' + esc(err.message), 'assistant', false);
-        keyDrawer.hidden = false;
-        showInlineKeySetup(question);
-        return;
-      }
-
-      // Check if local rule can help answer
-      var localHelp = localAnswer(question);
-      var errMsg = 'Google was unable to answer right now: ' + esc(err.message || 'Connection issue.');
-
-      if (localHelp) {
-        errMsg += '<br><br><strong>Local Patient Record Data:</strong><br>' + esc(localHelp);
-      }
-
-      addMessage(errMsg, 'assistant', true);
+      addMessage(esc(err.message || 'Ask Direct AI could not answer right now. Please try again.'), 'assistant', false);
     }
   }
 
@@ -618,28 +485,22 @@
       if (local) {
         addMessage(local, 'assistant', false);
       } else {
-        addMessage('In Local History mode, I can summarize your saved records, show latest or extreme values, or add readings. Switch to "Ask Google" mode above to ask any general or medical question.', 'assistant', false);
+        addMessage('In Local History mode, I can summarize your saved records, show latest or extreme values, or add readings. Switch to "Ask Direct AI" mode above to ask any general or medical question.', 'assistant', false);
       }
       return;
     }
 
-    // Google Mode (Default)
-    executeGoogleAsk(question);
+    // Direct AI mode uses only the server-side education function.
+    executeDirectAsk(question);
   }
 
   // --- Drawer Open & Close ---
   function open() {
     panel.hidden = false;
     launcher.setAttribute('aria-expanded', 'true');
-    updateKeyStatusUI();
 
     if (!log.children.length) {
-      if (hasGoogleKey()) {
-        addMessage('Hello! I am connected to <strong>Google API</strong> with live Google Search grounding. Ask me any question about diabetes, health guidelines, food, yoga, medications, or your saved records.', 'assistant', true);
-      } else {
-        addMessage('Welcome to <strong>DiaCare AI</strong>! Connect your free Google Gemini API key to directly answer any diabetes, medical, or health question with live Google Search grounding.', 'assistant', true);
-        keyDrawer.hidden = false;
-      }
+      addMessage('Welcome to <strong>Ask Direct AI</strong>. Sign in from the Dashboard to ask general educational questions. Do not include personal health details.', 'assistant', true);
       showSuggestions();
     }
     input.focus();
@@ -678,43 +539,8 @@
     clearEntryDraft();
     log.textContent = '';
     suggestionBox.textContent = '';
-    addMessage('Chat cleared. Ask any question with Google below.', 'assistant', false);
+    addMessage('Chat cleared. Ask a general question below.', 'assistant', false);
     showSuggestions();
-  });
-
-  // Toggle API Key Drawer
-  keyToggle.addEventListener('click', function () {
-    keyDrawer.hidden = !keyDrawer.hidden;
-    if (!keyDrawer.hidden) {
-      keyInput.focus();
-    }
-  });
-
-  // Save Key Form
-  keyForm.addEventListener('submit', function (e) {
-    e.preventDefault();
-    var val = keyInput.value.trim();
-    var client = getGoogleClient();
-    if (client) {
-      client.setApiKey(val);
-    }
-    keyInput.value = '';
-    updateKeyStatusUI();
-    if (val) {
-      keyDrawer.hidden = true;
-      addMessage('✓ Google API Key saved! You can now ask any question directly with Google.', 'assistant', false);
-    }
-  });
-
-  // Remove Key
-  keyRemove.addEventListener('click', function () {
-    var client = getGoogleClient();
-    if (client) {
-      client.setApiKey('');
-    }
-    keyInput.value = '';
-    updateKeyStatusUI();
-    addMessage('Google API Key removed.', 'assistant', false);
   });
 
   // Chat Form Submit
@@ -728,9 +554,4 @@
     if (event.key === 'Escape' && !panel.hidden) close();
   });
 
-  // Global event listener for key changes
-  document.addEventListener('diacare:google-key-changed', updateKeyStatusUI);
-
-  // Initialize status on load
-  updateKeyStatusUI();
 }());

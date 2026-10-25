@@ -20,18 +20,17 @@ Static site (Bootstrap + jQuery + GSAP from the Unslate template). PDF reading u
 - In Supabase Authentication → URL Configuration, set the Site URL and allowed redirect URL to `https://tabish3008.github.io/DiaCare-AI/` so confirmation links return to the Pages site.
 - Supabase Auth sessions are stored by the browser client. Access is governed by the migration's RLS policies. Treat this as a synthetic-data demo only, not a secure clinical records system; do not enter real patient information.
 
-## Google API Direct Search & Education Assistant
-DiaCare AI can call the Google Gemini API from the browser using Google Search Grounding. It tries Gemini 3.8 Flash first and falls back to supported model variants when needed.
+## Ask Direct AI
+The assistant sends general education questions to the Supabase Edge Function. The Gemini API key is stored as the server-side `GEMINI_API_KEY` secret and is never included in the website files or sent to the browser. Users must sign in from the Dashboard before using Ask Direct AI. The server accepts general educational questions only; do not send personal health details.
 
-### Features
-- **Direct Answers to Any Question**: Ask general diabetes questions, health guidelines, foods, exercise, yoga, symptoms, or ask about your own saved glucose readings. Answers are grounded in real-time Google Search results with clickable source links.
-- **Two Easy Setup Options**:
-  1. Open the assistant by clicking **✦ Ask Google AI** in the navbar, hero, or bottom-right launcher. Click **🔑 Key** and paste your API key. It is saved in this browser's `localStorage` (`diacare.google_api_key`).
-  2. The key is sent from the browser to Google and is visible to the site and its scripts. For a public deployment, use a server-side API proxy and restrict the key; do not commit a key into this repository.
-- **Free Google API Key**: Get a free API key in seconds at [Google AI Studio](https://aistudio.google.com/app/apikey).
-- **Patient Record Context**: When asking about your readings or test history, the assistant provides educational context comparing your metrics against clinical standards (ADA / WHO) while maintaining medical safety disclaimers.
-- **Offline History Mode**: Switch to "Local History Only" anytime if you want 100% offline rule-based summaries without contacting Google.
-- **Optional Supabase Edge Function**: The Supabase function in `supabase/functions/diacare-education/` is preserved for server-side deployments if needed.
+Configure and deploy the function once for this Supabase project:
+
+```sh
+supabase secrets set GEMINI_API_KEY=your-gemini-api-key
+supabase functions deploy diacare-education
+```
+
+Set the secret in Supabase project settings instead if you do not use the CLI. Never add the key to a frontend file or commit it to GitHub. The site has no API-key entry field.
 
 ## Upload limits
 - PDF/PNG only, max 10 MB, first 30 PDF pages. Text PDFs: extracted locally with PDF.js (`js/vendor/pdfjs`); the text and proposed values are shown for review before saving.

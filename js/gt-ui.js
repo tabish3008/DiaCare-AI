@@ -10,10 +10,7 @@ const cloudStatus=t=>{$('cloudStatus').textContent=t};
 window.DiaCareCloud={
  isSignedIn:()=>Boolean(cloudUser&&!cloudSyncPaused),
  askEducation:async question=>{
-  if(window.DiaCareGoogle&&window.DiaCareGoogle.hasApiKey()){
-   return await window.DiaCareGoogle.askGoogle(question);
-  }
-  if(!cloudUser||cloudSyncPaused)throw new Error('Sign in or add your Google Gemini API key to use Google-grounded education.');
+  if(!cloudUser||cloudSyncPaused)throw new Error('Sign in from the Dashboard to use Ask Direct AI.');
   const {data:result,error}=await supabase.functions.invoke('diacare-education',{body:{question}});
   if(error){let message=error.message;try{const body=await error.context.json();if(body.error)message=body.error}catch{}throw new Error(message)}
   return result;
