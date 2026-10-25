@@ -77,7 +77,7 @@ $('histRows').onclick=e=>{const id=e.target.dataset.del;if(id){data.readings=dat
 $('fFrom').onchange=$('fTo').onchange=render;
 /* ---- report ---- */
 $('makeReport').onclick=()=>{const rows=range(),p=data.patient||{},n=notes(rows),g=rows.filter(r=>r.test==='glucose'&&G.toCommon(r)<70&&G.toCommon(r)!==null);
- $('reportOut').innerHTML=`<h3>DiaCare summary (educational, not a diagnosis)</h3>
+ $('reportOut').innerHTML=`<h3>DIACARE AI summary (educational, not a diagnosis)</h3>
 <p><strong>Patient (pseudonym):</strong> ${esc(p.name||'not set')} &nbsp; <strong>Range:</strong> ${esc($('fFrom').value||rows[0]?.date||'—')} to ${esc($('fTo').value||rows.at(-1)?.date||'—')} &nbsp; <strong>Generated:</strong> ${new Date().toISOString().slice(0,10)}</p>
 <div class="notice">Please verify this summary against the original lab reports. This summary is not a diagnosis or treatment recommendation. Demo rows are synthetic.</div>
 <h4>Glucose</h4>${chart(rows,'glucose')}<h4>HbA1c (reflects roughly the previous 2–3 months)</h4>${chart(rows,'hba1c')}

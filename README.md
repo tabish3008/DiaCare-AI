@@ -1,4 +1,4 @@
-# DiaCare — educational diabetes data prototype
+# DIACARE AI — private glucose history companion
 **Not medical advice, not a medical device.** It does not diagnose, predict, or recommend treatment, herbs, supplements, kadha, or yoga routines.
 
 ## Run
@@ -8,6 +8,7 @@ Static site (Bootstrap + jQuery + GSAP from the Unslate template). PDF reading u
 ## Data & privacy
 - Everything is stored in your browser's localStorage (key `diacare.v1`). "Delete all data" removes it.
 - Uploaded files are read in the browser, never sent anywhere, and not saved after parsing. No camera, analytics, or external requests.
+- The patient-history assistant reads only confirmed records from this browser. Its chat messages are not saved and no health data is sent to an AI service. It provides descriptive summaries only, not diagnosis or treatment advice.
 - All demo data is synthetic. Use pseudonyms.
 
 ## Upload limits
