@@ -86,6 +86,11 @@ label{color:var(--tx);font-size:14px;margin-bottom:4px}
 .dc-assistant-form input { min-width: 0; flex: 1; height: 44px; padding: 0 13px; border: 1px solid rgba(255,255,255,.16); border-radius: 12px; background: #07161c; color: var(--tx); font: inherit; font-size: 13px; }
 .dc-assistant-form input::placeholder { color: #839fa4; }
 .dc-assistant-form button { width: 44px; height: 44px; border: 0; border-radius: 12px; background: var(--ac); color: #04201f; font-size: 20px; font-weight: 800; cursor: pointer; }
+.dc-assistant-entry-actions { display: flex; gap: 8px; padding: 0 14px 10px; background: #0c2027; }
+.dc-assistant-entry-actions[hidden] { display: none; }
+.dc-assistant-entry-actions button { min-height: 38px; padding: 7px 12px; border: 1px solid rgba(79,209,197,.4); border-radius: 10px; background: rgba(79,209,197,.12); color: #d9fffb; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.dc-assistant-entry-actions .dc-assistant-confirm { background: var(--ac); color: #04201f; }
+.dc-assistant-entry-actions button:hover { filter: brightness(1.12); }
 .dc-assistant-privacy { margin: 0; padding: 0 12px 10px; background: #0c2027; color: #8ba4a8; font-size: 9px; line-height: 1.4; text-align: center; }
 @media(max-width:991px) { .cover-v1#home-section { min-height: 0; padding-top: 140px; padding-bottom: 34px; } .hero-art { margin-bottom: 22px; } .unslate_co--section { padding-top: 72px; padding-bottom: 72px; } }
 @media(max-width:575px) { .dc-assistant-launcher { right: 14px; bottom: 14px; min-height: 52px; padding: 0 15px; } .dc-assistant-panel { right: 10px; bottom: 76px; width: calc(100vw - 20px); height: min(620px,calc(100dvh - 92px)); min-height: 360px; } .dc-assistant-message { max-width: 95%; } }

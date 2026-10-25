@@ -75,6 +75,7 @@ function render(){const rows=range();$('chartG').innerHTML=chart(rows,'glucose')
  $('histRows').innerHTML=rows.map(r=>{const c=G.toCommon(r),low=r.test==='glucose'&&c!==null&&c<70;return `<tr><td>${esc(r.date)}</td><td>${r.test==='hba1c'?'HbA1c':'Glucose'}</td><td>${esc(r.value)} ${esc(r.unit)} ${low?'<span class="tag lowt">Low — attention</span>':''}</td><td>${esc(r.fasting)}</td><td>${esc(r.source)}</td><td>${esc(r.origin)}</td><td>${esc(r.status)}</td><td><button class="btn-gt btn-ghost" data-del="${esc(r.id)}" aria-label="Delete reading from ${esc(r.date)}">✕</button></td></tr>`}).join('')||'<tr><td colspan="8">Empty.</td></tr>'}
 $('histRows').onclick=e=>{const id=e.target.dataset.del;if(id){data.readings=data.readings.filter(r=>r.id!==id);persist();render()}};
 $('fFrom').onchange=$('fTo').onchange=render;
+document.addEventListener('diacare:record-updated',()=>{data=G.store.load();showPatient();render()});
 /* ---- report ---- */
 $('makeReport').onclick=()=>{const rows=range(),p=data.patient||{},n=notes(rows),g=rows.filter(r=>r.test==='glucose'&&G.toCommon(r)<70&&G.toCommon(r)!==null);
  $('reportOut').innerHTML=`<h3>DIACARE AI summary (educational, not a diagnosis)</h3>

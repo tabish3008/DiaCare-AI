@@ -35,6 +35,7 @@
       '<input id="dc-assistant-input" maxlength="240" autocomplete="off" placeholder="Ask about this record…" required>',
       '<button type="submit" aria-label="Send question">↑</button>',
     '</form>',
+    '<div class="dc-assistant-entry-actions" hidden></div>',
     '<p class="dc-assistant-privacy">Messages stay on this page and are cleared when you close or refresh it.</p>'
   ].join('');
 
@@ -44,11 +45,14 @@
   var log = panel.querySelector('#dc-assistant-messages');
   var input = panel.querySelector('#dc-assistant-input');
   var suggestionBox = panel.querySelector('.dc-assistant-suggestions');
+  var entryActions = panel.querySelector('.dc-assistant-entry-actions');
+  var entryDraft = null;
   var examples = [
     'Summarize my history',
     'What are my latest readings?',
     'How many readings are saved?',
-    'Show my patient notes'
+    'Show my patient notes',
+    'Add a glucose reading'
   ];
 
   function freshRecord() {
@@ -79,6 +83,100 @@
     return r.date + ': ' + kind + ' ' + r.value + ' ' + r.unit + fasting + source;
   }
 
+  function clearEntryDraft() {
+    entryDraft = null;
+    entryActions.textContent = '';
+    entryActions.hidden = true;
+  }
+
+  function showEntryReview(draft) {
+    clearEntryDraft();
+    entryDraft = draft;
+    addMessage('Please check this entry before it is added: ' + readingLabel(draft) + (draft.fasting === 'unknown' ? '' : (draft.fasting === 'yes' ? ' · fasting' : ' · non-fasting')) + '. Confirm to save it to the patient history and charts.', 'assistant');
+    entryActions.hidden = false;
+    var confirm = document.createElement('button');
+    confirm.type = 'button';
+    confirm.className = 'dc-assistant-confirm';
+    confirm.textContent = 'Confirm and add reading';
+    confirm.addEventListener('click', function () {
+      if (!entryDraft) return;
+      var toSave = Object.assign({}, entryDraft, { source: 'patient assistant entry', origin: 'user-entered', status: 'reviewed' });
+      var error = G.validate(toSave);
+      if (error) {
+        addMessage('I could not save that entry: ' + error + ' Please start again with “Add a glucose reading.”', 'assistant');
+        clearEntryDraft();
+        return;
+      }
+      var data = G.store.load();
+      var result = G.addUnique(data, [toSave]);
+      if (!result.added) {
+        addMessage('That same reading is already in the patient history, so I did not add a duplicate.', 'assistant');
+        clearEntryDraft();
+        return;
+      }
+      if (!G.store.save(data)) {
+        addMessage('The browser could not save this reading. Check browser storage and try again.', 'assistant');
+        clearEntryDraft();
+        return;
+      }
+      addMessage('Reading added to this browser’s patient history. The charts and report will include it when refreshed.', 'assistant');
+      clearEntryDraft();
+      document.dispatchEvent(new CustomEvent('diacare:record-updated'));
+    });
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'dc-assistant-cancel';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', function () {
+      clearEntryDraft();
+      addMessage('Entry cancelled; nothing was saved.', 'assistant');
+    });
+    entryActions.append(confirm, cancel);
+  }
+
+  function continueEntry(question) {
+    var q = question.toLowerCase();
+    if (!entryDraft.test) {
+      if (/a1c|hba1c/.test(q)) entryDraft.test = 'hba1c';
+      else if (/glucose|sugar/.test(q)) entryDraft.test = 'glucose';
+      else return 'Which test should I add: glucose or HbA1c?';
+    }
+    var dateMatch = question.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+    if (dateMatch) entryDraft.date = dateMatch[1];
+    if (/non[- ]?fasting|after (a )?meal|\brbs\b|\bppbs\b/.test(q)) entryDraft.fasting = 'no';
+    else if (/\bfasting\b|\bfbs\b/.test(q)) entryDraft.fasting = 'yes';
+    else if (/\bunknown\b|\bskip\b|not sure/.test(q)) entryDraft.fasting = 'unknown';
+
+    var clean = question.replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ');
+    var valueMatch = clean.match(/\b(\d+(?:\.\d+)?)\s*(mg\s*\/\s*dl|mmol\s*\/\s*l|mmol\s*\/\s*mol|%)?/i);
+    var unitMap = { 'mg/dl': 'mg/dL', 'mmol/l': 'mmol/L', '%': '%', 'mmol/mol': 'mmol/mol' };
+    if (valueMatch) {
+      entryDraft.value = valueMatch[1];
+      var unitText = valueMatch[2] ? valueMatch[2].toLowerCase().replace(/\s/g, '') : '';
+      if (unitText) entryDraft.unit = unitMap[unitText] || '';
+    }
+    if (!entryDraft.value) return 'What number is shown on the report? Include the unit if you know it, for example “126 mg/dL.”';
+    if (!entryDraft.unit) return 'What unit is printed beside ' + entryDraft.value + '? For glucose use mg/dL or mmol/L; for HbA1c use % or mmol/mol.';
+    if (!entryDraft.date) return 'What date was this test taken? Please use YYYY-MM-DD, for example 2026-10-24.';
+    if (!entryDraft.fasting) return 'Was this fasting, non-fasting, or unknown?';
+    var draft = { date: entryDraft.date, test: entryDraft.test, value: entryDraft.value, unit: entryDraft.unit, fasting: entryDraft.fasting };
+    var error = G.validate(draft);
+    if (error) {
+      clearEntryDraft();
+      return 'I can’t prepare that entry: ' + error + ' Please start again with “Add a glucose reading” or “Add an HbA1c reading.”';
+    }
+    showEntryReview(draft);
+    return null;
+  }
+
+  function beginEntry(question) {
+    var askedA1c = /a1c|hba1c|haemoglobin|hemoglobin/.test(question);
+    var askedGlucose = /glucose|sugar|blood.?sugar/.test(question);
+    if (askedA1c && askedGlucose) return 'I see both glucose and HbA1c mentioned. Which single test should I add? Say “Add glucose” or “Add HbA1c.”';
+    entryDraft = { stage: 'collecting', test: askedA1c ? 'hba1c' : askedGlucose ? 'glucose' : null, fasting: null };
+    return continueEntry(question);
+  }
+
   function summarize(record) {
     var glucose = byTest(record.readings, 'glucose');
     var a1c = byTest(record.readings, 'hba1c');
@@ -106,6 +204,9 @@
     var askedGlucose = /glucose|sugar|blood.?sugar/.test(q);
     var selected = askedA1c ? a1c : askedGlucose ? glucose : [];
 
+    if (entryDraft && entryDraft.stage === 'collecting') return continueEntry(question);
+    if (/\b(add|enter|record|save|log)\b/.test(q) && /\b(glucose|sugar|blood.?sugar|a1c|hba1c)\b/.test(q)) return beginEntry(q);
+
     if (/^(\s*)(hi|hello|hey|namaste)\b/.test(q) || /what can you do|help/.test(q)) {
       return 'I can summarize confirmed readings saved in this browser, show recent values, compare the earliest and latest values, and repeat the patient notes. I cannot diagnose or recommend medicines, supplements, kadha, or exercise plans.';
     }
@@ -117,6 +218,10 @@
       if (p.notes) details.push('Saved notes: ' + p.notes);
       else details.push('There are no optional patient notes saved.');
       return details.join(' ');
+    }
+    if (/\b(what is|explain|tell me about)\b/.test(q) && /ayurved|yoga/.test(q)) {
+      if (/yoga/.test(q)) return 'Yoga is a form of physical activity. What is safe depends on a person’s health, fitness, complications, and medicines; DIACARE AI does not prescribe poses or a schedule based on glucose. Discuss a suitable activity plan with the care team. See the Movement & yoga section below.';
+      return 'Ayurveda is a traditional system of medicine. Evidence for Ayurvedic treatments for diabetes is limited, and some products may contain harmful contaminants or interact with medicines. DIACARE AI can’t recommend a product or dose. See the Ayurveda section below and discuss any product with a clinician or pharmacist.';
     }
     if (/medicine|medication|drug|dose|treatment|cure|diagnos|prescrib|supplement|kadha|ayurved|yoga|should i take/.test(q)) {
       return 'I can’t diagnose or recommend a medicine, supplement, kadha, dose, or yoga routine. Please discuss treatment and activity choices with the patient’s healthcare professional. I can summarize the saved record or show its notes.';
@@ -182,7 +287,8 @@
     if (!question) return;
     addMessage(question, 'user');
     input.value = '';
-    addMessage(answer(question), 'assistant');
+    var response = answer(question);
+    if (response) addMessage(response, 'assistant');
   }
 
   function open() {
@@ -200,12 +306,14 @@
     launcher.setAttribute('aria-expanded', 'false');
     log.textContent = '';
     suggestionBox.textContent = '';
+    clearEntryDraft();
     launcher.focus();
   }
 
   launcher.addEventListener('click', open);
   panel.querySelector('.dc-assistant-close').addEventListener('click', close);
   panel.querySelector('.dc-assistant-clear').addEventListener('click', function () {
+    clearEntryDraft();
     log.textContent = '';
     suggestionBox.textContent = '';
     addMessage('Chat cleared. Ask about confirmed readings and notes saved in this browser.', 'assistant');
