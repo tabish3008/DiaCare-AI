@@ -9,7 +9,7 @@ Static site (Bootstrap + jQuery + GSAP from the Unslate template). PDF reading u
 - Everything is stored in your browser's localStorage (key `diacare.v1`). "Delete all data" removes it.
 - Uploaded files are read in the browser, never sent anywhere, and not saved after parsing. No camera, analytics, or external requests.
 - The patient-history assistant reads only confirmed records from this browser. Its chat messages are not saved and no health data is sent to an AI service. It provides descriptive summaries only, not diagnosis or treatment advice.
-- All demo data is synthetic. Use pseudonyms.
+- The app starts without preloaded readings. Existing synthetic demo readings from older versions are removed when the record is loaded; user-entered and imported records are preserved until you choose "Delete all data".
 
 ## Upload limits
 - PDF/PNG only, max 10 MB, first 30 PDF pages. Text PDFs: parsed locally with PDF.js (`js/vendor/pdfjs`).

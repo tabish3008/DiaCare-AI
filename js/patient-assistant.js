@@ -79,8 +79,7 @@
   function readingLabel(r) {
     var kind = r.test === 'hba1c' ? 'HbA1c' : 'Glucose';
     var fasting = r.fasting === 'yes' ? ' · fasting' : r.fasting === 'no' ? ' · non-fasting' : '';
-    var source = r.origin === 'demo' ? ' · synthetic demo' : '';
-    return r.date + ': ' + kind + ' ' + r.value + ' ' + r.unit + fasting + source;
+    return r.date + ': ' + kind + ' ' + r.value + ' ' + r.unit + fasting;
   }
 
   function clearEntryDraft() {

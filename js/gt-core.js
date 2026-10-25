@@ -5,7 +5,11 @@ const UNITS={glucose:['mg/dL','mmol/L'],hba1c:['%','mmol/mol']};
 const LIM={glucose:{'mg/dL':[10,1000],'mmol/L':[0.5,55]},hba1c:{'%':[3,20],'mmol/mol':[10,200]}};
 const uid=()=>'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const store={
- load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'null');return d&&Array.isArray(d.readings)?d:{patient:null,readings:[]}}catch(e){return{patient:null,readings:[]}}},
+ load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(!d||!Array.isArray(d.readings))return{patient:null,readings:[]};
+  const readings=d.readings.filter(r=>r&&r.origin!=='demo');
+  const patient=d.patient&&d.patient.name==='Demo Patient (synthetic)'?null:d.patient;
+  if(readings.length!==d.readings.length||patient!==d.patient)localStorage.setItem(KEY,JSON.stringify({patient,readings}));
+  return{patient,readings}}catch(e){return{patient:null,readings:[]}}},
  save(d){try{localStorage.setItem(KEY,JSON.stringify(d));return true}catch(e){return false}},
  wipe(){try{localStorage.removeItem(KEY)}catch(e){}}};
 function validate(r){
@@ -43,10 +47,4 @@ function parseText(text){const out=[];let ctx=null;
   out.push({date:ctx?ctx.d:'',test:t,value:m[1],unit:unitOk?u:'',fasting:/fasting|\bfbs\b/i.test(line)?'yes':'unknown',
    uncertain:!ctx||ctx.amb||!unitOk||(dt?false:true)})}
  return out}
-const demo=()=>{const rows=[],now=new Date();
- for(let i=17;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,10);const s=d.toISOString().slice(0,10);if(i===7||i===8)continue;
-  rows.push({date:s,test:'glucose',value:String(Math.round(98+22*Math.sin(i/2.1)+i%3*4)),unit:'mg/dL',fasting:'yes',source:'synthetic demo',origin:'demo',status:'reviewed'});
-  if(i%3===0)rows.push({date:s,test:'hba1c',value:(5.9+0.3*Math.cos(i/3)).toFixed(1),unit:'%',fasting:'unknown',source:'synthetic demo',origin:'demo',status:'reviewed'})}
- rows.push({date:new Date(now.getFullYear(),now.getMonth()-2,20).toISOString().slice(0,10),test:'glucose',value:'4.1',unit:'mmol/L',fasting:'unknown',source:'synthetic demo',origin:'demo',status:'reviewed'});
- return rows};
-return{UNITS,store,validate,toCommon,commonUnit,addUnique,parseText,demo,uid}})();
+return{UNITS,store,validate,toCommon,commonUnit,addUnique,parseText,uid}})();
