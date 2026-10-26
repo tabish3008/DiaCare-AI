@@ -382,7 +382,7 @@
     var selected = askedA1c ? a1c : askedGlucose ? glucose : [];
 
     if (/^(\s*)(hi|hello|hey|namaste)\b/.test(q) || /what can you do|help/.test(q)) {
-      return 'I can help summarize saved readings and add reviewed entries in Local History mode. Ask Direct AI answers general educational questions after you sign in from the Dashboard.';
+      return 'I can help summarize saved readings and add reviewed entries in Local History mode. Ask Direct AI answers general educational questions without needing sign-in.';
     }
     if (/note|medication list|patient detail|profile|record details|name/.test(q) && !askedGlucose && !askedA1c) {
       var p = record.patient;
@@ -500,7 +500,7 @@
     launcher.setAttribute('aria-expanded', 'true');
 
     if (!log.children.length) {
-      addMessage('Welcome to <strong>Ask Direct AI</strong>. Sign in from the Dashboard to ask general educational questions. Do not include personal health details.', 'assistant', true);
+      addMessage('Welcome to <strong>Ask Direct AI</strong>. Ask general educational questions without signing in. Do not include personal health details.', 'assistant', true);
       showSuggestions();
     }
     input.focus();

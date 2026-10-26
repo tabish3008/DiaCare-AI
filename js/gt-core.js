@@ -36,15 +36,27 @@ function iso(s){let m;
   if(a>12&&b<=12)return{d:`${m[3]}-${String(b).padStart(2,'0')}-${String(a).padStart(2,'0')}`,amb:false};
   return{d:`${m[3]}-${String(b).padStart(2,'0')}-${String(a).padStart(2,'0')}`,amb}}
  return null}
-function parseText(text){const out=[];let ctx=null;
- for(const line of String(text).split(/\r?\n/)){
-  const dt=iso(line);if(dt)ctx={...dt,line:true};
-  const t=/hba1c|\ba1c\b|glycated|glycosylated|hb\s*a1c/i.test(line)?'hba1c':/glucose|\bfbs\b|\bppbs\b|\brbs\b|blood sugar/i.test(line)?'glucose':null;
-  const m=line.match(/(\d+(?:\.\d+)?)\s*(mg\s*\/\s*dl|mmol\s*\/\s*l|mmol\s*\/\s*mol|%)/i);
-  if(!t||!m)continue;
-  const u={'mg/dl':'mg/dL','mmol/l':'mmol/L','mmol/mol':'mmol/mol','%':'%'}[m[2].toLowerCase().replace(/\s/g,'')];
+function parseText(text){
+ const out=[],lines=String(text).replace(/\u00a0/g,' ').split(/\r?\n/).map(line=>line.trim()).filter(Boolean);let ctx=null,pendingType=null;
+ const typeOf=line=>/hba1c|\ba1c\b|glycated|glycosylated|hb\s*a1c/i.test(line)?'hba1c':/glucose|\bfbs\b|\bppbs\b|\brbs\b|blood sugar/i.test(line)?'glucose':null;
+ const resultOf=line=>line.match(/(\d+(?:[.,]\d+)?)\s*(mg\s*\/\s*dl|mmol\s*\/\s*l|mmol\s*\/\s*mol|%)/i);
+ for(let i=0;i<lines.length;i++){
+  const line=lines[i],dt=iso(line);if(dt)ctx={...dt,line:true};
+  const foundType=typeOf(line);if(foundType)pendingType=foundType;
+  const t=foundType||pendingType;if(!t)continue;
+  if(/reference range|normal range|expected range|target range|upper limit|lower limit/i.test(line))continue;
+  let candidate=line,m=resultOf(candidate),looked=0;
+  while(!m&&looked<2&&i+looked+1<lines.length){
+   const next=lines[i+looked+1];if(iso(next)||typeOf(next)||/reference range|normal range|expected range|target range|upper limit|lower limit/i.test(next))break;
+   candidate+=' '+next;looked++;m=resultOf(candidate);
+  }
+  if(!m)continue;
+  const normalized=m[2].toLowerCase().replace(/\s/g,'');
+  const u={'mg/dl':'mg/dL','mmol/l':'mmol/L','mmol/mol':'mmol/mol','%':'%'}[normalized];
   const unitOk=UNITS[t].includes(u);
-  out.push({date:ctx?ctx.d:'',test:t,value:m[1],unit:unitOk?u:'',fasting:/fasting|\bfbs\b/i.test(line)?'yes':'unknown',
-   uncertain:!ctx||ctx.amb||!unitOk||(dt?false:true)})}
- return out}
+  out.push({date:ctx?ctx.d:'',test:t,value:m[1].replace(',','.'),unit:unitOk?u:'',fasting:/fasting|\bfbs\b/i.test(candidate)?'yes':'unknown',uncertain:!ctx||ctx.amb||!unitOk||(dt?false:true)});
+  pendingType=null;i+=looked;
+ }
+ return out
+}
 return{UNITS,store,validate,toCommon,commonUnit,addUnique,parseText,uid}})();

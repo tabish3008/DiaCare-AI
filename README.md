@@ -21,9 +21,9 @@ Static site (Bootstrap + jQuery + GSAP from the Unslate template). PDF reading u
 - Supabase Auth sessions are stored by the browser client. Access is governed by the migration's RLS policies. Treat this as a synthetic-data demo only, not a secure clinical records system; do not enter real patient information.
 
 ## Ask Direct AI
-The assistant sends general education questions to the Supabase Edge Function. The Gemini API key is stored as the server-side `GEMINI_API_KEY` secret and is never included in the website files or sent to the browser. Users must sign in from the Dashboard before using Ask Direct AI. The server accepts general educational questions only; do not send personal health details.
+The assistant sends general education questions to the Supabase Edge Function. The Gemini API key is stored as the server-side `GEMINI_API_KEY` secret and is never included in the website files or sent to the browser. Ask Direct AI does not require sign-in. The server accepts general educational questions only, rate-limits each network address to 10 requests per 15 minutes and the whole site to 100 requests per day, and does not receive saved patient records. Do not send personal health details.
 
-Configure and deploy the function once for this Supabase project:
+Run `supabase/migrations/20261026_diacare_ai_rate_limits.sql` in the Supabase SQL Editor, then configure and deploy the function once for this project:
 
 ```sh
 supabase secrets set GEMINI_API_KEY=your-gemini-api-key
@@ -34,7 +34,7 @@ Set the secret in Supabase project settings instead if you do not use the CLI. N
 
 ## Upload limits
 - PDF/PNG only, max 10 MB, first 30 PDF pages. Text PDFs: extracted locally with PDF.js (`js/vendor/pdfjs`); the text and proposed values are shown for review before saving.
-- Scanned/image-only PDFs and PNGs: **no OCR engine is bundled**, so automatic text recognition is unavailable for these files. Add values manually in the review screen.
+- Scanned PDFs and PNGs use on-device English OCR. The OCR engine and language data download from a CDN on first use; the selected document stays in the browser. OCR covers the first 10 pages of a scanned PDF. Review all proposed values before saving.
 - Extraction is heuristic. Every row is reviewed by you before saving; uncertain rows are marked "Needs review". Lines with a value but no unit are skipped, not guessed.
 
 ## Files

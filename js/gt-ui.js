@@ -3,14 +3,14 @@ import { initializeSupabase } from './supabase-client.js';
 const supabaseState=await initializeSupabase(),supabase=supabaseState.client,supabaseConfigured=supabaseState.configured;
 const G=window.GT,$=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let data=G.store.load(),pending=[],pdfjs=null;
+let data=G.store.load(),pending=[],pdfjs=null,tesseractLoader=null;
 const say=(t,bad)=>{$('msg').innerHTML=`<div class="notice ${bad?'alert':''}">${esc(t)}</div>`};
 let cloudUser=null,cloudSyncPaused=false,cloudQueue=Promise.resolve();
 const cloudStatus=t=>{$('cloudStatus').textContent=t};
 window.DiaCareCloud={
  isSignedIn:()=>Boolean(cloudUser&&!cloudSyncPaused),
  askEducation:async question=>{
-  if(!cloudUser||cloudSyncPaused)throw new Error('Sign in from the Dashboard to use Ask Direct AI.');
+  if(!supabaseConfigured||!supabase)throw new Error('Ask Direct AI is temporarily unavailable because its service is not configured.');
   const {data:result,error}=await supabase.functions.invoke('diacare-education',{body:{question}});
   if(error){let message=error.message;try{const body=await error.context.json();if(body.error)message=body.error}catch{}throw new Error(message)}
   return result;
@@ -92,23 +92,85 @@ $('addManual').onclick=()=>{const r={date:$('mDate').value,test:$('mTest').value
  const c=G.toCommon(r);$('lowAlert').innerHTML=r.test==='glucose'&&c<70?lowHTML():'';render()};
 const lowHTML=()=>'<div class="notice alert" role="alert"><strong>Needs attention:</strong> this value is below 70 mg/dL, which NIDDK describes as low for many people with diabetes (your own target may differ). Follow your clinician’s personal plan or contact your care team. If someone is severely confused, unconscious, or having a seizure, call emergency services (India: 112). This site cannot provide a treatment plan.</div>';
 /* ---- upload & review ---- */
-const MAX=10*1024*1024;
+const MAX=10*1024*1024, MAX_PDF_PAGES=30, MAX_OCR_PAGES=10;
 async function loadPdfjs(){if(pdfjs)return pdfjs;pdfjs=await import('./vendor/pdfjs/pdf.min.mjs');pdfjs.GlobalWorkerOptions.workerSrc=new URL('./vendor/pdfjs/pdf.worker.min.mjs',import.meta.url).href;return pdfjs}
-async function pdfText(file){const lib=await loadPdfjs(),doc=await lib.getDocument({data:await file.arrayBuffer()}).promise;let out='';
- for(let p=1;p<=Math.min(doc.numPages,30);p++){const items=(await(await doc.getPage(p)).getTextContent()).items;let y=null,line='';
-  for(const it of items){const yy=Math.round(it.transform[5]);if(y!==null&&Math.abs(yy-y)>3){out+=line+'\n';line=''}y=yy;line+=it.str+' '}out+=line+'\n'}return out}
-$('file').onchange=async ev=>{const f=ev.target.files[0];$('reviewBox').hidden=true;$('pdfTextPreview').textContent='';if(!f)return;const s=$('upStatus');
- const isPdf=/\.pdf$/i.test(f.name)&&(f.type===''||f.type==='application/pdf'),isPng=/\.png$/i.test(f.name)&&(f.type===''||f.type==='image/png');
- if(!isPdf&&!isPng)return s.innerHTML='<div class="notice alert">Unsupported file type. Please choose a PDF or PNG.</div>';
- if(f.size>MAX)return s.innerHTML='<div class="notice alert">File is larger than 10 MB. Please use a smaller file.</div>';
- if(f.size===0)return s.innerHTML='<div class="notice alert">The file is empty.</div>';
- s.innerHTML='<div class="notice">Reading file locally…</div>';let rows=[],text='';
- try{if(isPdf){text=await pdfText(f);$('pdfTextPreview').textContent=text.trim();if(text.replace(/\s/g,'').length<20)throw{scan:1};rows=G.parseText(text)}else throw{scan:1}}
- catch(e){if(e&&e.scan)s.innerHTML='<div class="notice">No selectable text found (scan or image). OCR is not bundled in this build, so nothing was extracted. Add rows by hand below, or see the README to add a local OCR engine.</div>';
-  else s.innerHTML='<div class="notice alert">Could not read this file. It may be damaged, password-protected, or the local PDF engine failed to load (open the site through a local server — see README). You can still add rows manually.</div>'}
- if(rows.length)s.innerHTML=`<div class="notice">Found ${rows.length} possible value(s). Please check each one.</div>`;else if(text)s.innerHTML='<div class="notice">Text was extracted, but no likely glucose or HbA1c values were recognized. Inspect the extracted text below and add readings manually if needed.</div>';
- pending=rows.map(r=>({...r,source:f.name,origin:'imported'}));if(!rows.length&&!s.innerHTML.includes('alert'))pending=[];
- drawReview();$('reviewBox').hidden=false;ev.target.value=''};
+async function loadTesseract(){
+ if(window.Tesseract)return window.Tesseract;
+ if(!tesseractLoader)tesseractLoader=new Promise((resolve,reject)=>{
+  const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js';script.async=true;
+  script.onload=()=>{if(window.Tesseract)resolve(window.Tesseract);else{tesseractLoader=null;reject(new Error('OCR engine did not initialize.'))}};
+  script.onerror=()=>{tesseractLoader=null;reject(new Error('Could not load the local OCR engine. Check the internet connection and try again.'))};
+  document.head.appendChild(script);
+ });
+ return tesseractLoader;
+}
+async function createOcrWorker(status){
+ const api=await loadTesseract();
+ return api.createWorker('eng',1,{logger:message=>{
+  if(message.status==='recognizing text'&&Number.isFinite(message.progress))status('Reading image text locally… '+Math.round(message.progress*100)+'%');
+ }});
+}
+async function pdfText(file){
+ const lib=await loadPdfjs(),doc=await lib.getDocument({data:await file.arrayBuffer()}).promise;let out='';
+ for(let p=1;p<=Math.min(doc.numPages,MAX_PDF_PAGES);p++){
+  const page=await doc.getPage(p),content=await page.getTextContent();let y=null,line='';
+  for(const item of content.items){
+   if(!item.str)continue;
+   const yy=item.transform?Math.round(item.transform[5]):y;
+   if(y!==null&&yy!==null&&Math.abs(yy-y)>3){out+=line.trim()+'\n';line=''}
+   line+=item.str+(item.hasEOL?'\n':' ');if(yy!==null)y=yy;
+   if(item.hasEOL){out+=line.trim()+'\n';line='';y=null}
+  }
+  if(line.trim())out+=line.trim()+'\n';
+ }
+ return{doc,text:out};
+}
+async function ocrImage(file,status){
+ const worker=await createOcrWorker(status);
+ try{return(await worker.recognize(file)).data.text||''}finally{await worker.terminate()}
+}
+async function ocrPdf(doc,status){
+ const pages=Math.min(doc.numPages,MAX_OCR_PAGES),parts=[],worker=await createOcrWorker(status);
+ try{
+  for(let number=1;number<=pages;number++){
+   status('Preparing page '+number+' of '+pages+' for local OCR…');
+   const page=await doc.getPage(number),initial=page.getViewport({scale:2}),scale=Math.min(1,2600/Math.max(initial.width,initial.height));
+   const viewport=scale<1?page.getViewport({scale:2*scale}):initial,canvas=document.createElement('canvas');
+   canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+   const context=canvas.getContext('2d',{willReadFrequently:true});
+   if(!context)throw new Error('Could not prepare a PDF page for local OCR.');
+   await page.render({canvasContext:context,viewport}).promise;
+   const result=await worker.recognize(canvas);parts.push(result.data.text||'');
+   canvas.width=0;canvas.height=0;
+  }
+  return parts.join('\n');
+ }finally{await worker.terminate()}
+}
+const setUploadStatus=(element,message,alert=false)=>{element.innerHTML='<div class="notice'+(alert?' alert':'')+'">'+esc(message)+'</div>'};
+$('file').onchange=async ev=>{
+ const f=ev.target.files[0];$('reviewBox').hidden=true;$('pdfTextPreview').textContent='';if(!f)return;const status=$('upStatus');
+ const isPdf=/\.pdf$/i.test(f.name)||f.type==='application/pdf',isPng=/\.png$/i.test(f.name)||f.type==='image/png';
+ if(!isPdf&&!isPng){setUploadStatus(status,'Unsupported file type. Please choose a PDF or PNG.',true);return}
+ if(f.size>MAX){setUploadStatus(status,'File is larger than 10 MB. Please use a smaller file.',true);return}
+ if(f.size===0){setUploadStatus(status,'The file is empty.',true);return}
+ setUploadStatus(status,'Reading file locally…');let rows=[],text='',pdf=null,pdfPageCount=0,failed=false,usedOcr=false;
+ try{
+  if(isPdf){pdf=await pdfText(f);text=pdf.text;pdfPageCount=pdf.doc.numPages}
+  if(!isPdf||text.replace(/\s/g,'').length<20||G.parseText(text).length===0){
+   usedOcr=true;setUploadStatus(status,'No readable text layer found. Running private, on-device OCR…');
+   text=isPdf?await ocrPdf(pdf.doc,message=>setUploadStatus(status,message)):await ocrImage(f,message=>setUploadStatus(status,message));
+  }
+  $('pdfTextPreview').textContent=text.trim();rows=G.parseText(text);
+ }catch(error){
+  failed=true;setUploadStatus(status,error&&error.message?error.message:'Could not read this file. It may be damaged or password-protected.',true);
+ }finally{if(pdf&&pdf.doc)try{await pdf.doc.destroy()}catch{}}
+ if(rows.length)setUploadStatus(status,'Found '+rows.length+' possible value(s). Please check each one.');
+ else if(text&&!failed)setUploadStatus(status,'Text was read, but no glucose or HbA1c results were recognized. Review the extracted text below and add rows manually if needed.');
+ else if(!failed)setUploadStatus(status,'No text was recognized. You can add the readings manually below.');
+ if(usedOcr&&isPdf&&pdfPageCount>MAX_OCR_PAGES&&text&&rows.length)setUploadStatus(status,'Found '+rows.length+' possible value(s) in the first '+MAX_OCR_PAGES+' pages. Please check each one.');
+ pending=rows.map(row=>({...row,source:f.name,origin:'imported'}));
+ drawReview();$('reviewBox').hidden=false;ev.target.value='';
+};
 function drawReview(){$('revRows').innerHTML=pending.map((r,i)=>{const nr=r.uncertain||!r.date||!r.unit;return `<tr data-i="${i}">
 <td><input type="date" aria-label="Date" data-f="date" value="${esc(r.date)}"></td>
 <td><select aria-label="Test" data-f="test">${['glucose','hba1c'].map(t=>`<option ${t===r.test?'selected':''}>${t}</option>`).join('')}</select></td>

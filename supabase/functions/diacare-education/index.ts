@@ -1,3 +1,5 @@
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
 const allowedOrigins = new Set([
   'https://tabish3008.github.io',
   'http://localhost:8000',
@@ -15,9 +17,52 @@ function json(body: unknown, status: number, origin: string) {
       'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Cache-Control': 'no-store',
       'Vary': 'Origin',
     },
   });
+}
+
+function getSecretApiKey(): string {
+  const secretKeys = Deno.env.get('SUPABASE_SECRET_KEYS');
+  if (secretKeys) {
+    try {
+      const parsed = JSON.parse(secretKeys);
+      if (typeof parsed.default === 'string') return parsed.default;
+    } catch {
+      // Fall back to the legacy service-role environment variable below.
+    }
+  }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+}
+
+async function getRateLimitClientHash(request: Request): Promise<string> {
+  const forwarded = request.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim();
+  const ip = request.headers.get('cf-connecting-ip')?.trim() || forwarded;
+  if (!ip) throw new Error('Client address is unavailable.');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('diacare-ai-rate-limit-v1:' + ip));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function allowRequest(request: Request): Promise<boolean> {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = getSecretApiKey();
+  if (!url || !key) throw new Error('Supabase server credentials are unavailable.');
+  const client = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  const ipHash = await getRateLimitClientHash(request);
+  for (const limit of [
+    { hash: ipHash, requests: 10, seconds: 900 },
+    { hash: '0'.repeat(64), requests: 100, seconds: 86400 },
+  ]) {
+    const { data, error } = await client.rpc('consume_diacare_ai_rate_limit', {
+      p_ip_hash: limit.hash,
+      p_limit: limit.requests,
+      p_window_seconds: limit.seconds,
+    });
+    if (error) throw new Error('Rate limit service is unavailable.');
+    if (data !== true) return false;
+  }
+  return true;
 }
 
 Deno.serve(async (request: Request) => {
@@ -25,9 +70,6 @@ Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return json({ ok: true }, 200, origin);
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405, origin);
   if (origin && !allowedOrigins.has(origin)) return json({ error: 'Origin is not allowed.' }, 403, origin);
-  if (!request.headers.get('authorization')?.startsWith('Bearer ')) {
-    return json({ error: 'Sign in to use this educational search.' }, 401, origin);
-  }
 
   const apiKey = Deno.env.get('GEMINI_API_KEY');
   if (!apiKey) return json({ error: 'The education search is not configured yet.' }, 503, origin);
@@ -45,24 +87,35 @@ Deno.serve(async (request: Request) => {
   }
 
   try {
+    if (!await allowRequest(request)) return json({ error: 'The Ask Direct AI usage limit has been reached. Please try again later.' }, 429, origin);
+  } catch (error) {
+    console.error('Rate limit check failed:', error instanceof Error ? error.message : 'unknown error');
+    return json({ error: 'Ask Direct AI is temporarily unavailable. Please try again shortly.' }, 503, origin);
+  }
+
+  try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000);
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: 'user', parts: [{ text: question }] }],
-        tools: [{ google_search: {} }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 550 },
-      }),
-    });
-    clearTimeout(timeout);
+    const timer = setTimeout(() => controller.abort(), 25000);
+    let response: Response;
+    try {
+      response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          contents: [{ role: 'user', parts: [{ text: question }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 550 },
+        }),
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     const payload = await response.json();
     if (!response.ok) {
       console.error('Gemini request failed:', response.status, payload?.error?.status || 'upstream error');
-      return json({ error: response.status === 429 ? 'The free Google request limit has been reached for now. Try again later.' : 'Google could not answer right now. Try again shortly.' }, response.status === 429 ? 429 : 502, origin);
+      return json({ error: response.status === 429 ? 'The free AI request limit has been reached for now. Try again later.' : 'Ask Direct AI could not answer right now. Try again shortly.' }, response.status === 429 ? 429 : 502, origin);
     }
     const candidate = payload?.candidates?.[0];
     const answer = (candidate?.content?.parts || []).map((part: { text?: string }) => part.text || '').join('\n').trim();

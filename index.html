@@ -58,7 +58,7 @@
 <section class="unslate_co--section screen-only" id="upload-section"><div class="container">
 <h2 class="heading-h2 mb-4">Upload a report</h2>
 <div class="card-gt" data-aos="fade-up"><div class="drop"><label for="file">Choose a PDF or PNG (max 10 MB)</label><br><input id="file" type="file" accept=".pdf,.png,application/pdf,image/png">
-<p class="mt-3 small">Files are read in your browser and discarded after parsing — they are not uploaded or saved. Text PDFs are read with a local copy of PDF.js, and extracted text is shown for review. Scanned PDFs and PNGs need OCR, which is not bundled in this version; you can enter values by hand. No camera is used.</p></div>
+<p class="mt-3 small">PDFs and PNGs are read on this device and are never uploaded. Text PDFs use PDF.js; scans and PNGs use on-device OCR. The OCR engine and English language data download from a CDN the first time OCR is needed. Extracted text and proposed readings are shown for review before saving.</p></div>
 <div id="upStatus" role="status" aria-live="polite" class="mt-3"></div>
 <div id="reviewBox" hidden><h3 class="mt-4">Review extracted values</h3><p>Nothing is saved until you confirm. Edit, reject, or add rows. Rows marked “Needs review” are uncertain.</p>
 <details class="mt-3 mb-3"><summary>View all text extracted from this PDF</summary><pre id="pdfTextPreview" class="pdf-text-preview"></pre></details>
