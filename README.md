@@ -1,4 +1,4 @@
-# DIACARE AI — private glucose history companion
+# DIACARE AI — patient portal
 **Not medical advice, not a medical device.** It does not diagnose, predict, or recommend treatment, herbs, supplements, kadha, or yoga routines.
 
 ## Run
@@ -11,12 +11,13 @@ Static site (Bootstrap + jQuery + GSAP from the Unslate template). PDF reading u
 - The assistant has two modes. **My history** reads only confirmed records in this browser and stays local. **General education** sends only the typed question through the Supabase Edge Function to Gemini with Google Search grounding; it does not attach history or saved patient fields. Do not enter personal health details. Answers include source links and are educational, not diagnosis or treatment advice.
 - The app starts without preloaded readings. Existing synthetic demo readings from older versions are removed when the record is loaded; user-entered and imported records are preserved until you choose "Delete all data".
 - History charts and reports default to the six months ending today. Use the date fields to select another period. Summaries are descriptive comparisons, not a prediction, diagnosis, or treatment recommendation.
-- The Sources & safety section links to NIDDK and NCCIH patient education. Ayurveda and yoga information is general and is not personalized from readings.
+- The public Ayurveda and yoga information is general and is not personalized from readings.
 
 ## Supabase cloud saving
-- `supabase/migrations/20261025_patient_records.sql` defines the patient and reading tables, grants, and per-account row-level security policies. Run it once in the Supabase SQL Editor.
+- `supabase/migrations/20261025_patient_records.sql` defines patient and reading tables with per-account row-level security. `20261030_patient_portal.sql` adds last-visit tracking and a care-team-entered medication note. Run both in the Supabase SQL Editor.
 - Add the Supabase **publishable** key from the project's Connect/API Keys screen to `js/supabase-config.js`. The project URL is already filled in there. This public key is intended for browser use; never put a secret/service-role key in this public GitHub Pages site.
-- The Dashboard now includes email sign-up/sign-in. After confirmation (if Supabase requests it), sign in and save a pseudonymous patient record. Confirm before uploading any existing browser records. Confirmed readings sync to Supabase; PDF/PNG files and optional notes remain in the browser.
+- The public landing page has customer login, DiaCare information, and short Ayurveda and yoga sections. Patient accounts must be provisioned in Supabase; public account creation is disabled. A login only opens the private portal when a patient row is linked to that Supabase Auth user through `patients.owner_id`. The portal starts with upload and report generation. Uploads remain local.
+- When adding or linking an account, use the Supabase Auth user ID (`auth.users.id`) as `patients.owner_id`; do not store passwords in the patient table or website files. The portal shows the linked patient name and last visit. Any medication text must be entered by a clinician/care team; the app does not recommend medicine.
 - In Supabase Authentication → URL Configuration, set the Site URL and allowed redirect URL to `https://tabish3008.github.io/DiaCare-AI/` so confirmation links return to the Pages site.
 - Supabase Auth sessions are stored by the browser client. Access is governed by the migration's RLS policies. Treat this as a synthetic-data demo only, not a secure clinical records system; do not enter real patient information.
 

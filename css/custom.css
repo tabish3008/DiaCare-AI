@@ -163,3 +163,21 @@ a{color:#0c718f}
 @keyframes dcPulse{0%,80%,100%{transform:scale(0.4);opacity:0.4}40%{transform:scale(1);opacity:1}}
 @media(max-width:991px){.cover-v1#home-section{background-position:65% center}}
 @media(prefers-reduced-motion:reduce){.card-gt{transition:none}}
+
+/* Customer landing page and authenticated patient portal */
+#public-login .cloud-card{max-width:760px;margin:0 auto;padding:28px}
+#public-login .cloud-card h2{display:none}
+#cloudSignUp{display:none!important}
+#patientPortal[hidden]{display:none!important}
+body:not(.portal-open) #patientPortal{display:none!important}
+body.portal-open #home-section,body.portal-open #about-section,body.portal-open #ayurveda-section,body.portal-open #yoga-section,body.portal-open #public-login{display:none!important}
+body.portal-open #patientPortal{display:block!important}
+#patientPortal #dashboard-section{display:none!important}
+.patient-summary-section{padding-top:28px!important;padding-bottom:0!important}
+.patient-summary{display:grid;gap:7px;margin:0 auto;max-width:880px}
+.patient-summary strong{font-size:19px;color:#18354f}
+.patient-summary span{font-size:13px;color:#526b80}
+#home-section .btn-gt{display:inline-block;padding:13px 20px;border-radius:10px}
+
+body:not(.portal-open) .dc-assistant-launcher,body:not(.portal-open) .dc-assistant-panel,body.portal-open .dc-assistant-launcher,body.portal-open .dc-assistant-panel{display:none!important}
+#patientSummary #cloudSignOut{width:max-content;margin-top:8px}
